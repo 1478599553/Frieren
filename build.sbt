@@ -7,3 +7,5 @@ lazy val root = (project in file("."))
     name := "Frieren",
     idePackagePrefix := Some("frieren")
   )
+
+libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.3.0"
