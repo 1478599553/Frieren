@@ -8,7 +8,6 @@ case class LispNumber(value: Int) extends LispValue
 case class LispSymbol(name: String) extends LispValue
 case class LispList(elements: List[LispValue]) extends LispValue
 case class LispLambda(parameter: LispSymbol, body: LispValue) extends LispValue
-case class LispAdd(value1: LispValue, value2: LispValue) extends LispValue
 
 
 sealed trait AstNode
@@ -33,9 +32,6 @@ object LispParser extends RegexParsers {
     
     def lambdaExpr: Parser[LispLambda] = spaced("(" ~> "lambda" ~> symbol ~ expr <~ ")" ^^ { 
         case param ~ body => LispLambda(param, body)
-    })
-    def addExpr : Parser[LispAdd] = spaced("(" ~> "+" ~> expr ~ expr <~ ")" ^^ {
-        case value1 ~ value2 => LispAdd(value1, value2)
     })
     
     def parseToAst(input: String): AstNode = parseAll(expr, input) match {
