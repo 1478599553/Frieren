@@ -4,7 +4,7 @@ import scala.util.parsing.combinator._
 
 sealed trait AstNode
 case class Symbol(name: String) extends AstNode
-case class Number(value: Int) extends AstNode
+case class Number(value: Integer) extends AstNode
 case class Add(value1: AstNode, value2: AstNode) extends AstNode
 case class Abstraction(param: List[Symbol], body: List[AstNode]) extends AstNode
 case class Apply(func: AstNode, arg: List[AstNode]) extends AstNode
@@ -41,15 +41,23 @@ object LispParser extends RegexParsers {
 object Test extends App {
     
     val caseList = List(
+        "(lambda (f g x) (f x (g x)))",
+        "(lambda (x y) x)",
+        "((lambda (f g x) (f x (g x))) (lambda (x y) x) (lambda (x y) x))",
+        "((lambda (f g x) (f x (g x))) ((lambda (x y) x) ((lambda (f g x) (f x (g x))) ((lambda (f g x) (f x (g x))) (lambda (x y) x) (lambda (x y) x)))) (lambda (x y) x))",
+        "((lambda (s1 k1 s2 i k2) (s1 (k1 (s2 i)) k2)) (lambda (f g x) (f x (g x))) (lambda (x y) x) (lambda (f g x) (f x (g x))) ((lambda (f g x) (f x (g x))) (lambda (x y) x) (lambda (x y) x)) (lambda (x y) x))",
         "(lambda x (lambda y y))",
         "((lambda x (x x)) (lambda x (x x)))",
         "(lambda a (lambda b (lambda f (lambda f (a b)))))",//λ a. λ b. λ f. f a b
         "(lambda x1 (x1 x1))",
-        "(+ 1 ((lambda x (+ x 2)) 3))",
-        "(lambda f (lambda g (lambda x ((f x) (g x)))))"
+        "(+ 1 ((lambda x (+ x 2)) 3))"
+
     )
     
-    caseList.foreach(it => println(s"$it => ${LispParser.parseToAst(it)}"))
+    caseList.foreach(it =>
+        println(s"$it => ${LispParser.parseToAst(it)}")
+        println(s"${infer(LispParser.parseToAst(it))}")
+    )
 }
 
 
