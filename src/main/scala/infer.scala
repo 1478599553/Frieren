@@ -31,15 +31,13 @@ def infer(input: AstNode): Type = input match{
                 t += (variable -> t2)
                 t1
             case arrow: Type.Arrow =>
-                var a: Type.Arrow = arrow
+                var a: Type = arrow
                 arg.foreach(it =>
-                    var next = solveEquation(a, infer(it))
-                    next match{
+                    a match
+                        case a1:Type.Arrow =>
+                            a = solveApply(a1, infer(it))
                         case _:Type.Var =>
-                            next
-                        case nextArrow:Type.Arrow =>
-                            a = nextArrow
-                    }
+                            a
                 )
                 a
     case variable: Symbol =>
@@ -66,31 +64,26 @@ def solveList(list: List[AstNode], end: Type): Type = {
         Type.Arrow(infer(list.head), solveList(list.tail, end))
     }
 }
-def solveEquation(left: Type, right: Type): Type = left match{
-    case Type.Var(variable) =>
-        t += (variable -> right)
-        Type.Var(variable)
-    case Type.Arrow(l, r) =>
-        var env:Map[Symbol, Type] = Map()
-        def solveInEnv(l1: Type, r1: Type):Unit = l1 match{
-            case Type.Var(variable) =>
-                env += (variable -> r1)
-            case Type.Arrow(ll, lr) =>
-                r1 match {
-                    case v: Type.Var =>
-                        env.foreach((variable, t1) => {
-                            if (t1 == v) {
-                                env += (variable -> l1)
-                            }
-                        })
-                    case Type.Arrow(rl, rr) =>
-                        solveInEnv(ll, rl)
-                        solveInEnv(lr, rr)
-                }
-        }
-
-        solveInEnv(l, right)
-        update(r, env)
+def solveApply(left: Type.Arrow, right: Type): Type = {
+    var env:Map[Symbol, Type] = Map()
+    def solveInEnv(l1: Type, r1: Type):Unit = l1 match{
+        case Type.Var(variable) =>
+            env += (variable -> r1)
+        case Type.Arrow(ll, lr) =>
+            r1 match {
+                case v: Type.Var =>
+                    env.foreach((variable, t1) => {
+                        if (t1 == v) {
+                            env += (variable -> l1)
+                        }
+                    })
+                case Type.Arrow(rl, rr) =>
+                    solveInEnv(ll, rl)
+                    solveInEnv(lr, rr)
+            }
+    }
+    solveInEnv(left.left, right)
+    update(left.right, env)
 }
 
 def updateVar(left: Type, right: Type): Type = left match {
