@@ -40,10 +40,11 @@ object LispParser extends RegexParsers {
 
 object Test extends App {
     val caseList = List(
+        "(lambda x (lambda f (lambda g (g (f x) (f x x)))))",
+        "(lambda x ((lambda (f x) (f x)) x))",
         "(lambda (f x a) (f x (x a)))",
         "(lambda (a b c d e) ((lambda (a b f g h) (a b c d e f g h))))",
         "(lambda x (+ x 1))",
-        "(lambda x (lambda f (lambda g (g (f x) (f x x)))))",
         "((lambda x (x x)) (lambda x (x x)))",
         "(+ 1 ((lambda x (+ x 2)) 3))",
         "((lambda (f g x) (f x (g x))) (lambda (x y) x) (lambda (x y) x))",

@@ -112,25 +112,20 @@ def solveApply(func: Type, arg: Type): Type = {
                             throw new WrongTypeException("WrongType")
                     }
                 case v: Type.Var =>
-                    val updatedr = updateInEnv(r)
-                    updatedr match
-                        case _:Type.Arrow =>
-                            checkSelfLoop(v, updatedr)
-                            env += (v -> updatedr)
-                        case _:Type.Var =>
-                            env += (v -> updatedr)
-                        case _:Type.RealType =>
-                            env += (v -> updatedr)
-                            t.foreach((symbol, tList) =>
-                                t += (symbol -> tList.tail.::(updateInEnv(tList.head)))
-                            )
+                    updateInEnv(r) match
+                        case a:Type.Arrow =>
+                            checkSelfLoop(v, a)
+                            env += (v -> a)
+                        case rv:Type.Var =>
+                            if(v != rv){
+                                env += (v -> rv)
+                            }
+                        case re:Type.RealType =>
+                            env += (v -> re)
                 case re: Type.RealType =>
                     updateInEnv(r) match {
                         case v: Type.Var =>
                             env += (v -> re)
-                            t.foreach((symbol, tList) =>
-                                t += (symbol -> tList.tail.::(updateInEnv(tList.head)))
-                            )
                         case re:Type.RealType =>
 
                         case arrow: Type.Arrow =>
@@ -138,7 +133,11 @@ def solveApply(func: Type, arg: Type): Type = {
 
                     }
             }
+            t.foreach((symbol, tList) =>
+                t += (symbol -> tList.tail.::(updateInEnv(tList.head)))
+            )
             updateInEnv(right)
+
         case v: Type.Var =>
             count += 1
             val t1 = Type.Arrow(arg, Type.Var(count))
