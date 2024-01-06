@@ -44,7 +44,7 @@ def inferNode(input: AstNode): Type = input match{
                 t += (it -> List(Type.Var(count)))
             }
         )
-        val res = solveLambda(param, body)
+        val res = solveLambda(param, inferNode(body.head))
         param.foreach(it =>
             if(t(it).tail.isEmpty){
                 t -= it
@@ -70,11 +70,11 @@ def inferNode(input: AstNode): Type = input match{
         res2
 }
 
-def solveLambda(list: List[Symbol], body:List[AstNode]):Type = {
-    var t1 = inferNode(body.head)
+def solveLambda(list: List[Symbol], result:Type):Type = {
+    var t1 = result
     val reverse = list.reverse
     reverse.foreach(it =>
-        t1 = Type.Arrow(t(it).head, t1)     //todo: 多语句
+        t1 = Type.Arrow(t(it).head, t1)
     )
     t1
 }
@@ -126,8 +126,10 @@ def solveApply(func: Type, arg: Type): Type = {
                     updateInEnv(r) match {
                         case v: Type.Var =>
                             env += (v -> re)
-                        case re:Type.RealType =>
-
+                        case re1:Type.RealType =>
+                            if(re != re1){
+                                throw new WrongTypeException("WrongType")
+                            }
                         case arrow: Type.Arrow =>
                             throw new WrongTypeException("WrongType")
 
