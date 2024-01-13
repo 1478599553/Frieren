@@ -27,12 +27,16 @@ object test extends App {
 }
 
 def testParser(): Unit = {
+    /*
     caseList.foreach(it =>
-        println(s"$it => ${LispParser.parseToAst(it)}")
+        println(s"$it => ${FrierenParser.parseToAst(it)}")
     )
+    */
 }
 def testInfer(): Unit = {
+    /*
     caseList.foreach(it =>
-        println(s"${infer(LispParser.parseToAst(it))}")
+        println(s"${infer(FrierenParser.parseToAst(it))}")
     )
+    */
 }
