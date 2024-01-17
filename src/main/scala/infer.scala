@@ -1,6 +1,6 @@
 package frieren
 
-import frieren.Type.RealType
+import Type.RealType
 
 import java.lang.invoke.WrongMethodTypeException
 
@@ -29,13 +29,49 @@ enum RType {
     case WrongType(message: String)
 }
 
-var lambdaType:Map[Symbol, List[Type]] = Map()
-var letType:Map[Symbol, List[Type]] = Map()
+var typeMap: Map[Symbol, SymbolType] = Map()
 var count = 0
+case class SymbolType(list: List[Type], poly: Boolean){
+    var typeList: List[Type] = list
+    var polymorphic: Boolean = poly
+    def add(t:Type): Unit = {
+        typeList = typeList.::(t)
+    }
+    def update(t:Type): Unit = {
+        typeList = typeList.tail.::(t)
+    }
+    def remove_isEmpty(): Boolean = {
+        typeList = typeList.tail
+        typeList.isEmpty
+    }
+    def head: Type = {
+        if(polymorphic){
+            var env: Map[Type.Var, Type.Var] = Map()
+            def update(t:Type):Type = t match{
+                case v:Type.Var =>
+                    if(env.contains(v)){
+                        env(v)
+                    }else{
+                        count += 1
+                        val res:Type.Var = Type.Var(count)
+                        env += (v -> res)
+                        res
+                    }
+                case Type.Arrow(l, r) =>
+                    Type.Arrow(update(l), update(r))
+                case re:Type.RealType =>
+                    re
+            }
+            update(typeList.head)
+        }else{
+            typeList.head
+        }
+    }
+}
 
 class WrongTypeException(message: String) extends Exception(message)
 def infer(input: AstNode): Type = {
-    lambdaType = Map()
+    typeMap = Map()
     count = 0
     try {
         inferNode(input)
@@ -48,18 +84,16 @@ def inferNode(input: AstNode): Type = input match{
     case Abstraction(param, body) =>
         param.foreach(it =>
             count += 1
-            if(lambdaType.contains(it)){
-                lambdaType += (it -> lambdaType(it).::(Type.Var(count)))
+            if(typeMap.contains(it)){
+                typeMap(it).add(Type.Var(count))
             }else{
-                lambdaType += (it -> List(Type.Var(count)))
+                typeMap += (it -> SymbolType(List(Type.Var(count)), false))
             }
         )
         val res = solveLambda(param, inferNode(body.head))
         param.foreach(it =>
-            if(lambdaType(it).tail.isEmpty){
-                lambdaType -= it
-            }else{
-                lambdaType += (it -> lambdaType(it).tail)
+            if(typeMap(it).remove_isEmpty()){
+                typeMap -= it
             }
         )
         res
@@ -70,7 +104,7 @@ def inferNode(input: AstNode): Type = input match{
         )
         res
     case variable: Symbol =>
-        lambdaType(variable).head
+        typeMap(variable).head
     case _:Number =>
         Type.RealType(RType.Int)
     case _:Bool =>
@@ -84,19 +118,17 @@ def inferNode(input: AstNode): Type = input match{
         bindings.foreach(it =>
             val (symbol, astNode) = it
             val value = infer(astNode)
-            if (letType.contains(symbol)) {
-                letType += (symbol -> letType(symbol).::(value))
+            if (typeMap.contains(symbol)) {
+                typeMap(symbol).add(Type.Var(count))
             } else {
-                letType += (symbol -> List(value))
+                typeMap += (symbol -> SymbolType(List(Type.Var(count)), true))
             }
         )
         val res = solveNodeList(in)
         bindings.foreach(it =>
             val (symbol, astNode) = it
-            if (lambdaType(symbol).tail.isEmpty) {
-                lambdaType -= symbol
-            } else {
-                lambdaType += (symbol -> lambdaType(symbol).tail)
+            if (typeMap(symbol).remove_isEmpty()) {
+                typeMap -= symbol
             }
         )
         res
@@ -114,7 +146,7 @@ def solveLambda(list: List[Symbol], result:Type):Type = {
     var t1 = result
     val reverse = list.reverse
     reverse.foreach(it =>
-        t1 = Type.Arrow(lambdaType(it).head, t1)
+        t1 = Type.Arrow(typeMap(it).head, t1)
     )
     t1
 }
@@ -138,8 +170,10 @@ def solveApply(func: Type, arg: Type): Type = {
     }
 
     def updateSymbol():Unit = {
-        lambdaType.foreach((symbol, tList) =>
-            lambdaType += (symbol -> tList.tail.::(updateInEnv(tList.head)))
+        typeMap.foreach((symbol, symbolType) =>
+            if(!symbolType.polymorphic){
+                symbolType.update(updateInEnv(symbolType.head))
+            }
         )
     }
 
