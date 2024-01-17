@@ -1,11 +1,13 @@
 package frieren
 
+import frieren.Type.RealType
+
 import java.lang.invoke.WrongMethodTypeException
 
 enum Type {
     case Arrow(left: Type, right:Type)
     case Var(num: Int)
-    case RealType(name: String)
+    case RealType(name: RType)
 
     override def toString: String = {
         this match
@@ -15,22 +17,30 @@ enum Type {
                 s"${l.toString}->${r.toString}"
             case Type.Var(num) =>
                 s"t$num"
-            case Type.RealType(name) =>
-                s"$name"
+            case Type.RealType(rType) =>
+                s"$rType"
     }
 }
 
-var t:Map[Symbol, List[Type]] = Map()
+enum RType {
+    case Int
+    case Bool
+    case Unit
+    case WrongType(message: String)
+}
+
+var lambdaType:Map[Symbol, List[Type]] = Map()
+var letType:Map[Symbol, List[Type]] = Map()
 var count = 0
 
 class WrongTypeException(message: String) extends Exception(message)
 def infer(input: AstNode): Type = {
-    t = Map()
+    lambdaType = Map()
     count = 0
     try {
         inferNode(input)
     }catch
-        case w:WrongTypeException => Type.RealType(w.getMessage)
+        case w:WrongTypeException => Type.RealType(RType.WrongType(w.getMessage))
 
 }
 
@@ -38,18 +48,18 @@ def inferNode(input: AstNode): Type = input match{
     case Abstraction(param, body) =>
         param.foreach(it =>
             count += 1
-            if(t.contains(it)){
-                t += (it -> t(it).::(Type.Var(count)))
+            if(lambdaType.contains(it)){
+                lambdaType += (it -> lambdaType(it).::(Type.Var(count)))
             }else{
-                t += (it -> List(Type.Var(count)))
+                lambdaType += (it -> List(Type.Var(count)))
             }
         )
         val res = solveLambda(param, inferNode(body.head))
         param.foreach(it =>
-            if(t(it).tail.isEmpty){
-                t -= it
+            if(lambdaType(it).tail.isEmpty){
+                lambdaType -= it
             }else{
-                t += (it -> t(it).tail)
+                lambdaType += (it -> lambdaType(it).tail)
             }
         )
         res
@@ -60,21 +70,51 @@ def inferNode(input: AstNode): Type = input match{
         )
         res
     case variable: Symbol =>
-        t(variable).head
+        lambdaType(variable).head
     case _:Number =>
-        Type.RealType("Int")
+        Type.RealType(RType.Int)
+    case _:Bool =>
+        Type.RealType(RType.Bool)
     case Add(value1, value2) =>
-        val add = Type.Arrow(Type.RealType("Int"), Type.Arrow(Type.RealType("Int"), Type.RealType("Int")))
+        val add = Type.Arrow(Type.RealType(RType.Int), Type.Arrow(Type.RealType(RType.Int), Type.RealType(RType.Int)))
         val res1 = solveApply(add, inferNode(value1))
         val res2 = solveApply(res1, inferNode(value2))
         res2
+    case Let(bindings, in) =>
+        bindings.foreach(it =>
+            val (symbol, astNode) = it
+            val value = infer(astNode)
+            if (letType.contains(symbol)) {
+                letType += (symbol -> letType(symbol).::(value))
+            } else {
+                letType += (symbol -> List(value))
+            }
+        )
+        val res = solveNodeList(in)
+        bindings.foreach(it =>
+            val (symbol, astNode) = it
+            if (lambdaType(symbol).tail.isEmpty) {
+                lambdaType -= symbol
+            } else {
+                lambdaType += (symbol -> lambdaType(symbol).tail)
+            }
+        )
+        res
+}
+
+def solveNodeList(list: List[AstNode]): Type = {
+    var res:Type = RealType(RType.Unit)
+    list.foreach(it =>
+        res = inferNode(it)
+    )
+    res
 }
 
 def solveLambda(list: List[Symbol], result:Type):Type = {
     var t1 = result
     val reverse = list.reverse
     reverse.foreach(it =>
-        t1 = Type.Arrow(t(it).head, t1)
+        t1 = Type.Arrow(lambdaType(it).head, t1)
     )
     t1
 }
@@ -95,6 +135,12 @@ def solveApply(func: Type, arg: Type): Type = {
             Type.Arrow(updateInEnv(left), updateInEnv(right))
         case re:Type.RealType =>
             re
+    }
+
+    def updateSymbol():Unit = {
+        lambdaType.foreach((symbol, tList) =>
+            lambdaType += (symbol -> tList.tail.::(updateInEnv(tList.head)))
+        )
     }
 
     func match {
@@ -135,9 +181,7 @@ def solveApply(func: Type, arg: Type): Type = {
 
                     }
             }
-            t.foreach((symbol, tList) =>
-                t += (symbol -> tList.tail.::(updateInEnv(tList.head)))
-            )
+            updateSymbol()
             updateInEnv(right)
 
         case v: Type.Var =>
@@ -145,9 +189,7 @@ def solveApply(func: Type, arg: Type): Type = {
             val t1 = Type.Arrow(arg, Type.Var(count))
             checkSelfLoop(v, t1)
             env += (v -> t1)
-            t.foreach((symbol, tList) =>
-                t += (symbol -> tList.tail.::(updateInEnv(tList.head)))
-            )
+            updateSymbol()
             Type.Var(count)
         case re:Type.RealType =>
             throw new WrongTypeException("WrongType")
