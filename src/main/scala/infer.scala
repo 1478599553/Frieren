@@ -90,7 +90,7 @@ def inferNode(input: AstNode): Type = input match{
                 typeMap += (it -> SymbolType(List(Type.Var(count)), false))
             }
         )
-        val res = solveLambda(param, inferNode(body.head))
+        val res = solveLambda(param, solveNodeList(body))
         param.foreach(it =>
             if(typeMap(it).remove_isEmpty()){
                 typeMap -= it
@@ -116,7 +116,7 @@ def inferNode(input: AstNode): Type = input match{
         res2
     case Let(bindings, in) =>
         bindings.foreach(it =>
-            val (symbol, astNode) = bindings.head
+            val (symbol, astNode) = it
             val value = inferNode(astNode)
             if (typeMap.contains(symbol)) {
                 typeMap(symbol).add(Type.Var(count))
