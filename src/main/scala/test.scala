@@ -1,5 +1,6 @@
 package frieren
 
+/*
 private val caseList = List(
     "((lambda x (x 1 2)) (lambda x x))",
     "(lambda x (lambda f (lambda g (g (f x) (f x x)))))",
@@ -21,22 +22,30 @@ private val caseList = List(
         "((lambda x x) (lambda x x))"
 
 )
+*/
+private val caseList = List(
+
+    """
+      | fn a => a(1)
+      |
+      |
+      |""".stripMargin
+
+)
 object test extends App {
     testParser()
     testInfer()
 }
 
 def testParser(): Unit = {
-    /*
+
     caseList.foreach(it =>
         println(s"$it => ${FrierenParser.parseToAst(it)}")
     )
-    */
+
 }
 def testInfer(): Unit = {
-    /*
     caseList.foreach(it =>
         println(s"${infer(FrierenParser.parseToAst(it))}")
     )
-    */
 }
