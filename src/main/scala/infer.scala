@@ -44,7 +44,7 @@ case class SymbolType(list: List[Type], poly: Boolean){
         typeList = typeList.tail
         typeList.isEmpty
     }
-    def head: Type = {
+    def value: Type = {
         if(polymorphic){
             var env: Map[Type.Var, Type.Var] = Map()
             def update(t:Type):Type = t match{
@@ -104,7 +104,7 @@ def inferNode(input: AstNode): Type = input match{
         )
         res
     case variable: Symbol =>
-        typeMap(variable).head
+        typeMap(variable).value
     case _:Number =>
         Type.RealType(RType.Int)
     case _:Bool =>
@@ -119,7 +119,7 @@ def inferNode(input: AstNode): Type = input match{
             val (symbol, astNode) = it
             val value = inferNode(astNode)
             if (typeMap.contains(symbol)) {
-                typeMap(symbol).add(Type.Var(count))
+                typeMap(symbol).add(value)
             } else {
                 typeMap += (symbol -> SymbolType(List(value), true))
             }
@@ -128,7 +128,7 @@ def inferNode(input: AstNode): Type = input match{
         bindings.foreach(it =>
             val (symbol, astNode) = it
             if (typeMap(symbol).remove_isEmpty()) {
-
+                typeMap -= symbol
             }
         )
         res
@@ -146,7 +146,7 @@ def solveLambda(list: List[Symbol], result:Type):Type = {
     var t1 = result
     val reverse = list.reverse
     reverse.foreach(it =>
-        t1 = Type.Arrow(typeMap(it).head, t1)
+        t1 = Type.Arrow(typeMap(it).value, t1)
     )
     t1
 }
@@ -172,7 +172,7 @@ def solveApply(func: Type, arg: Type): Type = {
     def updateSymbol():Unit = {
         typeMap.foreach((symbol, symbolType) =>
             if(!symbolType.polymorphic){
-                symbolType.update(updateInEnv(symbolType.head))
+                symbolType.update(updateInEnv(symbolType.value))
             }
         )
     }
