@@ -17,21 +17,23 @@ private val caseList = List(
     "((lambda (s1 k1 s2 i k2) (s1 (k1 (s2 i)) k2)) (lambda (f g x) (f x (g x))) (lambda (x y) x) (lambda (f g x) (f x (g x))) ((lambda (f g x) (f x (g x))) (lambda (x y) x) (lambda (x y) x)) (lambda (x y) x))",
     "(lambda x (lambda y y))",
     "(lambda a (lambda b (lambda f (f (a b)))))", //λ a. λ b. λ f. f a b
-    "(lambda x1 (x1 x1))",
-    "((lambda x x) 1)" +
-        "((lambda x x) (lambda x x))"
+    "(lambda x1 (x1 x1))"
 
 )
 */
 private val caseList = List(
 
     """
-      | fn a => a(1)
+      | let f = ((fn x => x)(fn x => x))((fn x => x)(fn x => x)) in
+      |     let (b = fn a => a, c = fn a => a(1)) in
+      |         f(b(c))
       |
       |
       |""".stripMargin
 
 )
+
+
 object test extends App {
     testParser()
     testInfer()
