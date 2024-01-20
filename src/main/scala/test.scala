@@ -24,9 +24,9 @@ private val caseList = List(
 private val caseList = List(
 
     """
-      | let f = ((fn x => x)(fn x => x))((fn x => x)(fn x => x)) in
-      |     let (b = fn a => a, c = fn a => a(1)) in
-      |         f(b(c))
+      |(fn x => fn y => x(y))
+      |
+      |
       |
       |
       |""".stripMargin
