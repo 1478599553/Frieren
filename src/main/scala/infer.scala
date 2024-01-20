@@ -31,14 +31,14 @@ enum RType {
 
 var typeMap: Map[Symbol, SymbolType] = Map()
 var count = 0
-case class SymbolType(list: List[Type], poly: Boolean){
-    var typeList: List[Type] = list
-    var polymorphic: Boolean = poly
-    def add(t:Type): Unit = {
+case class SymbolType(list: List[(Type, Boolean)]){
+    var typeList: List[(Type, Boolean)] = list
+    def polymorphic: Boolean = typeList.head._2
+    def add(t:(Type, Boolean)): Unit = {
         typeList = typeList.::(t)
     }
     def update(t:Type): Unit = {
-        typeList = typeList.tail.::(t)
+        typeList = typeList.tail.::((t, false))
     }
     def remove_isEmpty(): Boolean = {
         typeList = typeList.tail
@@ -62,9 +62,9 @@ case class SymbolType(list: List[Type], poly: Boolean){
                 case re:Type.RealType =>
                     re
             }
-            update(typeList.head)
+            update(typeList.head._1)
         }else{
-            typeList.head
+            typeList.head._1
         }
     }
 }
@@ -85,9 +85,9 @@ def inferNode(input: AstNode): Type = input match{
         param.foreach(it =>
             count += 1
             if(typeMap.contains(it)){
-                typeMap(it).add(Type.Var(count))
+                typeMap(it).add((Type.Var(count), false))
             }else{
-                typeMap += (it -> SymbolType(List(Type.Var(count)), false))
+                typeMap += (it -> SymbolType(List((Type.Var(count), false))))
             }
         )
         val res = solveLambda(param, solveNodeList(body))
@@ -119,9 +119,9 @@ def inferNode(input: AstNode): Type = input match{
             val (symbol, astNode) = it
             val value = inferNode(astNode)
             if (typeMap.contains(symbol)) {
-                typeMap(symbol).add(value)
+                typeMap(symbol).add((value, true))
             } else {
-                typeMap += (symbol -> SymbolType(List(value), true))
+                typeMap += (symbol -> SymbolType(List((value, true))))
             }
         )
         val res = solveNodeList(in)
