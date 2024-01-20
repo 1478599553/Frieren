@@ -63,7 +63,7 @@ object FrierenParser extends RegexParsers {
 
     def listList: Parser[List[List[AstNode]]] = spaced(arguList) ~ spaced(rep(spaced(arguList))) ^^ {case head ~ tail => tail.::(head)}
 
-    def exrp: Parser[AstNode] = (spaced("(") ~> bracketed(spaced(expr)) <~ spaced(")")) | bracketed(spaced(number) | spaced(bool) | spaced(let) | spaced(abstraction) | spaced(symbol) )
+    def exrp: Parser[AstNode] = (spaced("(") ~> bracketed(spaced(application)) <~ spaced(")")) | bracketed(spaced(number) | spaced(bool) | spaced(let) | spaced(abstraction) | spaced(symbol) )
 
     def application : Parser[Apply] = (spaced(exrp) ~ spaced(listList)) ^^{case func ~ lList =>
             var res: Apply = Apply(func, lList.head)
