@@ -24,7 +24,7 @@ private val caseList = List(
 private val caseList = List(
 
     """
-      |(fn x => fn y => x(y))
+      |1+2
       |
       |
       |
