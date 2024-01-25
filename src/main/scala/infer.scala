@@ -90,7 +90,7 @@ def inferNode(input: AstNode): Type = input match{
                 typeMap += (it -> SymbolType(List((Type.Var(count), false))))
             }
         )
-        val res = solveLambda(param, solveNodeList(body))
+        val res = solveLambda(param, solveBlock(body))
         param.foreach(it =>
             if(typeMap(it).remove_isEmpty()){
                 typeMap -= it
@@ -98,11 +98,7 @@ def inferNode(input: AstNode): Type = input match{
         )
         res
     case Apply(func, arg) =>
-        var res = inferNode(func)
-        arg.foreach(it =>
-            res = solveApply(res, inferNode(it))
-        )
-        res
+        solveApplyList(inferNode(func), inferNodeList(arg))
     case variable: Symbol =>
         typeMap(variable).value
     case _:Number =>
@@ -111,9 +107,10 @@ def inferNode(input: AstNode): Type = input match{
         Type.RealType(RType.Bool)
     case Add(value1, value2) =>
         val add = Type.Arrow(Type.RealType(RType.Int), Type.Arrow(Type.RealType(RType.Int), Type.RealType(RType.Int)))
-        val res1 = solveApply(add, inferNode(value1))
-        val res2 = solveApply(res1, inferNode(value2))
-        res2
+        solveApplyList(add, inferNodeList(List(value1, value2)))
+    case Mul(value1, value2) =>
+        val mul = Type.Arrow(Type.RealType(RType.Int), Type.Arrow(Type.RealType(RType.Int), Type.RealType(RType.Int)))
+        solveApplyList(mul, inferNodeList(List(value1, value2)))
     case Let(bindings, in) =>
         bindings.foreach(it =>
             val (symbol, astNode) = it
@@ -124,7 +121,7 @@ def inferNode(input: AstNode): Type = input match{
                 typeMap += (symbol -> SymbolType(List((value, true))))
             }
         )
-        val res = solveNodeList(in)
+        val res = solveBlock(in)
         bindings.foreach(it =>
             val (symbol, astNode) = it
             if (typeMap(symbol).remove_isEmpty()) {
@@ -134,12 +131,16 @@ def inferNode(input: AstNode): Type = input match{
         res
 }
 
-def solveNodeList(list: List[AstNode]): Type = {
+def solveBlock(list: List[AstNode]): Type = {
     var res:Type = RealType(RType.Unit)
     list.foreach(it =>
         res = inferNode(it)
     )
     res
+}
+
+def inferNodeList(list: List[AstNode]): List[Type] = {
+    list.map(x => inferNode(x))
 }
 
 def solveLambda(list: List[Symbol], result:Type):Type = {
@@ -151,7 +152,7 @@ def solveLambda(list: List[Symbol], result:Type):Type = {
     t1
 }
 
-def solveApply(func: Type, arg: Type): Type = {
+def solveApplyList(func: Type, arg: List[Type]): Type = {
     var env: Map[Type.Var, Type] = Map()
 
     def updateInEnv(input: Type): Type = input match {
@@ -170,64 +171,72 @@ def solveApply(func: Type, arg: Type): Type = {
     }
 
     def updateSymbol():Unit = {
-        typeMap.foreach((symbol, symbolType) =>
-            if(!symbolType.polymorphic){
-                symbolType.update(updateInEnv(symbolType.value))
+        typeMap.foreach(it =>
+            if(!it._2.polymorphic){
+                it._2.update(updateInEnv(it._2.value))
             }
         )
     }
 
-    func match {
-        case Type.Arrow(left, right) =>
-            solveEquation(left, arg)
-            def solveEquation(l: Type, r: Type): Unit = updateInEnv(l) match {
-                case Type.Arrow(ll, lr) =>
-                    updateInEnv(r) match {
-                        case Type.Arrow(rl, rr) =>
-                            solveEquation(ll, rl)
-                            solveEquation(lr, rr)
-                        case v: Type.Var =>
-                            env += (v -> l)
-                        case re: Type.RealType =>
-                            throw new WrongTypeException("WrongType")
-                    }
+    def solveEquation(l: Type, r: Type): Unit = updateInEnv(l) match {
+        case Type.Arrow(ll, lr) =>
+            updateInEnv(r) match {
+                case Type.Arrow(rl, rr) =>
+                    solveEquation(ll, rl)
+                    solveEquation(lr, rr)
                 case v: Type.Var =>
-                    updateInEnv(r) match
-                        case a:Type.Arrow =>
-                            checkSelfLoop(v, a)
-                            env += (v -> a)
-                        case rv:Type.Var =>
-                            if(v != rv){
-                                env += (v -> rv)
-                            }
-                        case re:Type.RealType =>
-                            env += (v -> re)
+                    env += (v -> l)
                 case re: Type.RealType =>
-                    updateInEnv(r) match {
-                        case v: Type.Var =>
-                            env += (v -> re)
-                        case re1:Type.RealType =>
-                            if(re != re1){
-                                throw new WrongTypeException("WrongType")
-                            }
-                        case arrow: Type.Arrow =>
-                            throw new WrongTypeException("WrongType")
-
-                    }
+                    throw new WrongTypeException("WrongType")
             }
-            updateSymbol()
-            updateInEnv(right)
-
         case v: Type.Var =>
-            count += 1
-            val t1 = Type.Arrow(arg, Type.Var(count))
-            checkSelfLoop(v, t1)
-            env += (v -> t1)
-            updateSymbol()
-            Type.Var(count)
-        case re:Type.RealType =>
-            throw new WrongTypeException("WrongType")
+            updateInEnv(r) match
+                case a: Type.Arrow =>
+                    checkSelfLoop(v, a)
+                    env += (v -> a)
+                case rv: Type.Var =>
+                    if (v != rv) {
+                        env += (v -> rv)
+                    }
+                case re: Type.RealType =>
+                    env += (v -> re)
+        case re: Type.RealType =>
+            updateInEnv(r) match {
+                case v: Type.Var =>
+                    env += (v -> re)
+                case re1: Type.RealType =>
+                    if (re != re1) {
+                        throw new WrongTypeException("WrongType")
+                    }
+                case arrow: Type.Arrow =>
+                    throw new WrongTypeException("WrongType")
+
+            }
     }
+
+    def solveApply(l: Type, r: Type): Type = {
+        func match {
+            case Type.Arrow(left, right) =>
+                solveEquation(left, r)
+                updateSymbol()
+                updateInEnv(right)
+            case v: Type.Var =>
+                count += 1
+                val t1 = Type.Arrow(r, Type.Var(count))
+                checkSelfLoop(v, t1)
+                env += (v -> t1)
+                updateSymbol()
+                Type.Var(count)
+            case re: Type.RealType =>
+                throw new WrongTypeException("WrongType")
+        }
+    }
+
+    var res = func
+    arg.foreach(it =>
+        res = solveApply(res, it)
+    )
+    res
 }
 
 def checkSelfLoop(left:Type.Var, right: Type):Unit = {
