@@ -11,7 +11,36 @@ object FrierenParser extends RegexParsers {
 
     def bracketed[T](p: Parser[T]): Parser[T] = spaced(p) | (spaced("(") ~> bracketed(spaced(p)) <~ spaced(")"))
 
-    def expr : Parser[AstNode] = bracketed(spaced(number) | spaced(bool) | spaced(let) | spaced(application) | spaced(abstraction) | spaced(symbol) )
+    def expr : Parser[AstNode] = bracketed(spaced(last) | spaced(number) | spaced(bool) | spaced(let) | spaced(application) | spaced(abstraction) | spaced(symbol) )
+
+    def getOne : Parser[AstNode] = {
+        bracketed((spaced("(") ~> spaced(expr) <~ spaced(")")) | spaced(number) | spaced(bool) | spaced(symbol))
+    }
+
+    def first: Parser[AstNode] = {
+        (spaced(getOne) ~ getfuncs(spaced(mul))) ^^{case x ~ func => func(x)} | spaced(getOne)
+    }
+
+    def last : Parser[AstNode] = {
+        (spaced(getOne) ~ getfuncs(spaced(add))) ^^{case x ~ func => func(x)} | first
+    }
+    def getfuncs(p : Parser[AstNode => AstNode]) : Parser[AstNode => AstNode] = {
+        (p ~ rep(p)) ^^{case head ~ tail =>
+            x =>
+                var res: AstNode = head(x)
+                tail.foreach(func => {
+                    res = func(res)
+                })
+                res
+        }
+    }
+    def add: Parser[AstNode => Add] = {
+        spaced("+") ~> spaced(first) ^^ {v2 => v1 => Add(v1, v2)}
+    }
+
+    def mul: Parser[AstNode => Mul] = {
+        spaced("*") ~> spaced(getOne) ^^ { v2 => v1 => Mul(v1, v2) }
+    }
 
     def number: Parser[AstNode] = """-?\d+""".r ^^ (s => Number(s.toInt))
     def symbol: Parser[Symbol] = """([a-zA-Z_][a-zA-Z_1-9]*)""".r ^^ (s => Symbol(s))

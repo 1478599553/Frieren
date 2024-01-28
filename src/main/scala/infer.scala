@@ -171,9 +171,9 @@ def solveApplyList(func: Type, arg: List[Type]): Type = {
     }
 
     def updateSymbol():Unit = {
-        typeMap.foreach(it =>
-            if(!it._2.polymorphic){
-                it._2.update(updateInEnv(it._2.value))
+        typeMap.foreach((symbol, symbolType) =>
+            if(!symbolType.polymorphic){
+                symbolType.update(updateInEnv(symbolType.value))
             }
         )
     }
@@ -215,7 +215,7 @@ def solveApplyList(func: Type, arg: List[Type]): Type = {
     }
 
     def solveApply(l: Type, r: Type): Type = {
-        func match {
+        l match {
             case Type.Arrow(left, right) =>
                 solveEquation(left, r)
                 updateSymbol()
