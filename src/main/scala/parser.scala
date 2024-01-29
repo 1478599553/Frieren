@@ -48,10 +48,10 @@ object FrierenParser extends RegexParsers {
 
     def bracketed[T](p: Parser[T]): Parser[T] = (spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")) | spaced(p)
 
-    def expr : Parser[AstNode] = bracketed(let) | bracketed(abstraction) | bracketed(application) | bracketed(last) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol)
+    def expr : Parser[AstNode] = spaced(bracketed(let) | bracketed(abstraction) | bracketed(application) | bracketed(last) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol))
 
     def getOne : Parser[AstNode] = {
-        bracketed((spaced("(") ~> spaced(expr) <~ spaced(")")) | bracketed(let) | bracketed(abstraction) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol))
+        (spaced("(") ~> spaced(expr) <~ spaced(")")) | spaced(bracketed(let) | bracketed(abstraction) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol))
     }
 
     def first: Parser[AstNode] = {
