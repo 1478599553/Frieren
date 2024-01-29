@@ -1,5 +1,5 @@
 package frieren
-
+/*
 import Type.RealType
 
 import java.lang.invoke.WrongMethodTypeException
@@ -253,3 +253,4 @@ def checkSelfLoop(left:Type.Var, right: Type):Unit = {
 }
 
 
+*/
