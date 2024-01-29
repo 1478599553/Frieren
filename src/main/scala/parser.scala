@@ -22,7 +22,7 @@ object FrierenParser extends RegexParsers {
     }
 
     def last : Parser[AstNode] = {
-        (spaced(getOne) ~ getfuncs(spaced(add))) ^^{case x ~ func => func(x)} | first
+        (spaced(first) ~ getfuncs(spaced(add))) ^^{case x ~ func => func(x)} | first
     }
     def getfuncs(p : Parser[AstNode => AstNode]) : Parser[AstNode => AstNode] = {
         (p ~ rep(p)) ^^{case head ~ tail =>
