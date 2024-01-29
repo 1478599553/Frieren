@@ -31,7 +31,7 @@ enum RType {
 
 var typeMap: Map[Symbol, SymbolType] = Map()
 var count = 0
-case class SymbolType(list: List[(Type, Boolean)]){
+class SymbolType(list: List[(Type, Boolean)]){
     var typeList: List[(Type, Boolean)] = list
     def polymorphic: Boolean = typeList.head._2
     def add(t:(Type, Boolean)): Unit = {
@@ -150,23 +150,24 @@ def solveLambda(list: List[Symbol], result:Type):Type = {
     t1
 }
 
-def solveApplyList(func: Type, arg: List[Type]): Type = {
-    var env: Map[Type.Var, Type] = Map()
+var env: Map[Type.Var, Type] = Map()
+def updateInEnv(input: Type): Type = input match {
+    case v: Type.Var =>
+        if (env.contains(v)) {
+            val next = updateInEnv(env(v))
+            env += (v -> next)
+            next
+        } else {
+            v
+        }
+    case Type.Arrow(left, right) =>
+        Type.Arrow(updateInEnv(left), updateInEnv(right))
+    case re: Type.RealType =>
+        re
+}
 
-    def updateInEnv(input: Type): Type = input match {
-        case v: Type.Var =>
-            if (env.contains(v)) {
-                val next = updateInEnv(env(v))
-                env += (v -> next)
-                next
-            } else {
-                v
-            }
-        case Type.Arrow(left, right) =>
-            Type.Arrow(updateInEnv(left), updateInEnv(right))
-        case re:Type.RealType =>
-            re
-    }
+def solveApplyList(func: Type, arg: List[Type]): Type = {
+
 
     def updateSymbol():Unit = {
         typeMap.foreach((symbol, symbolType) =>
@@ -183,9 +184,10 @@ def solveApplyList(func: Type, arg: List[Type]): Type = {
                     solveEquation(ll, rl)
                     solveEquation(lr, rr)
                 case v: Type.Var =>
+                    checkSelfLoop(v, Type.Arrow(ll, lr))
                     env += (v -> l)
                 case re: Type.RealType =>
-                    throw new WrongTypeException("WrongType")
+                    throw new WrongTypeException(s"$re can't apply")
             }
         case v: Type.Var =>
             updateInEnv(r) match
@@ -204,16 +206,16 @@ def solveApplyList(func: Type, arg: List[Type]): Type = {
                     env += (v -> re)
                 case re1: Type.RealType =>
                     if (re != re1) {
-                        throw new WrongTypeException("WrongType")
+                        throw new WrongTypeException(s"Require $re, but found $re1")
                     }
                 case arrow: Type.Arrow =>
-                    throw new WrongTypeException("WrongType")
+                    throw new WrongTypeException(s"Require $re, but found $arrow")
 
             }
     }
 
     def solveApply(l: Type, r: Type): Type = {
-        l match {
+        updateInEnv(l) match {
             case Type.Arrow(left, right) =>
                 solveEquation(left, r)
                 updateSymbol()
@@ -226,7 +228,7 @@ def solveApplyList(func: Type, arg: List[Type]): Type = {
                 updateSymbol()
                 Type.Var(count)
             case re: Type.RealType =>
-                throw new WrongTypeException("WrongType")
+                throw new WrongTypeException(s"$re can't apply")
         }
     }
 
