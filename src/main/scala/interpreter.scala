@@ -1,22 +1,37 @@
 package frieren
 
-type Env = Map[Symbol,Value]
-def interp (expr:List[AstNode],env:Env): Value = {
-    def interpSingle(expr:AstNode,env:Env) : Value = {
-        expr match
-            case Symbol(name) => ???
-            case Number(value) => ???
-            case Add(value1, value2) => ???
-            case Mul(lhs, rhs) => ???
-            case Abstraction(param, body) => ???
-            case Apply(func, arg) => ???
-            case Let(bindings, in) => ???
-            case Bool(value) => ???
-    }
+import Value.{BoolValue, ClosureValue, NumberValue}
 
+type Env = Map[Symbol,Value]
+def interp (expr:AstNode,env:Env): Value = {
     expr match
-        case ::(current, Nil) => interpSingle(current, env)
-        case ::(current, next) =>
-            interpSingle(current,env)
-            interp(next,env)
+        case sym @ Symbol(name) => env(sym)
+        case Number(value) => NumberValue(value)
+        case Add(value1, value2) => (interp(value1,env)+interp(value2,env)).get
+        case Mul(lhs, rhs) => (interp(lhs,env)*interp(rhs,env)).get
+        case lam @ Abstraction(_, _) => ClosureValue(lam,env)
+        
+        case Apply(func, arg) => 
+            val fun = interp(func,env)
+            fun match
+                case NumberValue(value) => throw Exception("Number cannot be applied to!")
+                case ClosureValue(lam, envi) => 
+                    if lam.param.length != arg.length then throw Exception("Wrong argument count in applying on function "+lam)
+                    else {
+                        val newEnv = lam.param.zip(arg.map(interp(_,env))).foldLeft(envi){
+                            case (envir,(k,v)) => envir+(k->v)
+                        }
+                        interp(lam.body,newEnv)
+                    }
+                
+        case Let(bindings, in) =>
+            val newEnv = bindings.map({case (s,e) => (s,interp(e,env))}).foldLeft(env){
+                case (envi,(k,v)) => envi+(k->v)
+            }
+            interp(in,newEnv)
+        case Bool(value) => BoolValue(value)
+        case Block(content) =>
+            content match
+                case ::(current,Nil) => interp(current,env)
+                case ::(head, next) => interp(head,env);interp(Block(next),env)
 }

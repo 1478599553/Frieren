@@ -24,12 +24,9 @@ private val caseList = List(
 private val caseList = List(
 
     """
-      |{
-      |1;
-      |3
-      |}
       |
-      |
+      | let (f = fn a => a + a * 5,b=2) in
+      | f(b)
       |
       |
       |""".stripMargin
@@ -40,6 +37,7 @@ private val caseList = List(
 object test extends App {
     testParser()
     testInfer()
+    testInterp()
 }
 
 def testParser(): Unit = {
@@ -53,4 +51,10 @@ def testInfer(): Unit = {
     //caseList.foreach(it =>
         //println(s"${infer(FrierenParser.parseToAst(it))}")
     //)
+}
+
+def testInterp(): Unit = {
+    caseList.foreach(it=>
+        println(s"$it => ${interp(FrierenParser.parseToAst(it),Map[Symbol,Value]())}")
+    )
 }
