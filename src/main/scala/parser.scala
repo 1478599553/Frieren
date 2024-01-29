@@ -46,12 +46,12 @@ object FrierenParser extends RegexParsers {
         it
     }
 
-    def bracketed[T](p: Parser[T]): Parser[T] = spaced(p) | (spaced("(") ~> bracketed(spaced(p)) <~ spaced(")"))
+    def bracketed[T](p: Parser[T]): Parser[T] = (spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")) | spaced(p)
 
-    def expr : Parser[AstNode] = bracketed(spaced(last | number | bool | let | application | abstraction | block | symbol))
+    def expr : Parser[AstNode] = bracketed(let) | bracketed(abstraction) | bracketed(application) | bracketed(last) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol)
 
     def getOne : Parser[AstNode] = {
-        bracketed((spaced("(") ~> spaced(expr) <~ spaced(")")) | spaced(number) | spaced(bool) | spaced(symbol))
+        bracketed((spaced("(") ~> spaced(expr) <~ spaced(")")) | bracketed(let) | bracketed(abstraction) | bracketed(application) | spaced(number) | spaced(bool) | bracketed(block) | spaced(symbol))
     }
 
     def first: Parser[AstNode] = {
@@ -102,7 +102,9 @@ object FrierenParser extends RegexParsers {
         }
 
     def paraList : Parser[List[Symbol]] = spaced("(") ~> spaced(repsep(spaced(symbol),spaced(","))) <~ spaced(")") | (spaced(symbol)^^{it => List(it)})
-    def abstraction : Parser[Abstraction] = (spaced("fn") ~> spaced(paraList) ~ (spaced("=>") ~> expr )) ^^ { case para ~ body => Abstraction(para, body) }
+    def abstraction : Parser[Abstraction] = {
+        (spaced("fn") ~> spaced(paraList) ~ (spaced("=>") ~> expr )) ^^ { case para ~ body => Abstraction(para, body) }
+    }
     // let x = 1 in x;
     // let (x = 1, y = 2) in x + y;
     def letBindings : Parser[List[(Symbol,AstNode)]] = (spaced(symbol) ~ (spaced("=") ~> spaced(expr))) ^^ { case s ~ v => List((s, v)) }

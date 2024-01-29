@@ -1,5 +1,5 @@
 package frieren
-/*
+
 import Type.RealType
 
 import java.lang.invoke.WrongMethodTypeException
@@ -90,7 +90,7 @@ def inferNode(input: AstNode): Type = input match{
                 typeMap += (it -> SymbolType(List((Type.Var(count), false))))
             }
         )
-        val res = solveLambda(param, solveBlock(body))
+        val res = solveLambda(param, inferNode(body))
         param.foreach(it =>
             if(typeMap(it).remove_isEmpty()){
                 typeMap -= it
@@ -121,7 +121,7 @@ def inferNode(input: AstNode): Type = input match{
                 typeMap += (symbol -> SymbolType(List((value, true))))
             }
         )
-        val res = solveBlock(in)
+        val res = inferNode(in)
         bindings.foreach(it =>
             val (symbol, astNode) = it
             if (typeMap(symbol).remove_isEmpty()) {
@@ -129,14 +129,12 @@ def inferNode(input: AstNode): Type = input match{
             }
         )
         res
-}
-
-def solveBlock(list: List[AstNode]): Type = {
-    var res:Type = RealType(RType.Unit)
-    list.foreach(it =>
-        res = inferNode(it)
-    )
-    res
+    case Block(content) =>
+        var res: Type = RealType(RType.Unit)
+        content.foreach(it =>
+            res = inferNode(it)
+        )
+        res
 }
 
 def inferNodeList(list: List[AstNode]): List[Type] = {
@@ -252,5 +250,3 @@ def checkSelfLoop(left:Type.Var, right: Type):Unit = {
     }
 }
 
-
-*/
