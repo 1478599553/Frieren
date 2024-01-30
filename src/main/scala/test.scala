@@ -48,9 +48,9 @@ def testParser(): Unit = {
 
 }
 def testInfer(): Unit = {
-    //caseList.foreach(it =>
-        //println(s"${infer(FrierenParser.parseToAst(it))}")
-    //)
+    caseList.foreach(it =>
+        println(s"${infer(FrierenParser.parseToAst(it))}")
+    )
 }
 
 def testInterp(): Unit = {
