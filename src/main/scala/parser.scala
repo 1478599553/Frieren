@@ -82,12 +82,12 @@ object FrierenParser extends RegexParsers {
     def number: Parser[AstNode] = """-?\d+""".r ^^ (s => Number(s.toInt))
     def symbol: Parser[Symbol] = """([a-zA-Z_][a-zA-Z_1-9]*)""".r ^^ (s => Symbol(s))
     def symbolList : Parser[List[Symbol]] = spaced("(" ~> rep(spaced(symbol)) <~ ")")
-    def spaced[T](p: Parser[T]): Parser[T] = debug(p <~ """\s*""".r)
+    def spaced[T](p: Parser[T]): Parser[T] = p <~ """\s*""".r
     def bool: Parser[Bool] = "true" ^^ { _ => Bool(true)} | "false" ^^ { _ => Bool(false)}
 
     def block : Parser[Block] = spaced("{") ~> (repsep(spaced(expr),spaced(";")) ^^ {it => Block(it)} ) <~ spaced("}")
 
-    def arguList : Parser[List[AstNode]] = spaced("(") ~> spaced(repsep(spaced(expr),spaced(","))) <~ spaced(")")
+    def arguList : Parser[List[AstNode]] = spaced("(") ~> spaced(repsep(spaced(expr),spaced(","))) <~ (spaced(")") | exception("\")\" not found in argument"))
 
     def listList: Parser[List[List[AstNode]]] = spaced(arguList) ~ spaced(rep(spaced(arguList))) ^^ {case head ~ tail => tail.::(head)}
 
@@ -109,11 +109,20 @@ object FrierenParser extends RegexParsers {
     // let (x = 1, y = 2) in x + y;
     def letBindings : Parser[List[(Symbol,AstNode)]] = (spaced(symbol) ~ (spaced("=") ~> spaced(expr))) ^^ { case s ~ v => List((s, v)) }
             | (spaced("(") ~> spaced(repsep(spaced(symbol) ~ (spaced("=") ~> spaced(expr)), spaced(","))) <~ spaced(")")) ^^ (bindings => bindings.map({ case s ~ v => (s, v) }))
-    def let : Parser[Let] = (spaced("let") ~> letBindings ~ (spaced("in") ~> spaced(expr))) ^^ {case bindings ~ body => Let(bindings,body)}
-    
-    
-    def parseToAst(input: String): AstNode = parseAll(expr, input) match {
-        case Success(result, _) => result
-        case _ => throw new IllegalArgumentException("Parsing failed")
+    def let : Parser[Let] = (spaced("let") ~> letBindings ~ ((spaced("in") ~> spaced(expr)) | exception("let without in expr"))) ^^ {case bindings ~ body => Let(bindings,body)}
+
+    def exception(message: String): Parser[AstNode] = {
+        throw ParserException(message)
     }
+    private class ParserException(message: String) extends Exception(message)
+    def parseToAst(input: String): AstNode =
+        try {
+            parseAll(expr, input) match {
+                case Success(result, _) => result
+                case _ => throw new IllegalArgumentException("Parsing failed")
+            }
+        }catch
+            case w:ParserException => throw new IllegalArgumentException(s"Parsing failed: ${w.getMessage}")
+
 }
+
