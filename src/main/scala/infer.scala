@@ -72,6 +72,7 @@ class SymbolType(list: List[(Type, Boolean)]){
 class WrongTypeException(message: String) extends Exception(message)
 def infer(input: AstNode): Type = {
     typeMap = Map()
+    env = Map()
     count = 0
     try {
         inferNode(input)
