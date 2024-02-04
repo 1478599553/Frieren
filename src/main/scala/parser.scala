@@ -48,10 +48,11 @@ object FrierenParser extends RegexParsers {
 
     def bracketed[T](p: Parser[T]): Parser[T] = (spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")) | spaced(p)
 
-    def expr : Parser[AstNode] = spaced(bracketed(let) | bracketed(abstraction) | bracketed(op(last)) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol))
+    def bracket[T](p: Parser[T]): Parser[T] = spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")
+    def expr : Parser[AstNode] = spaced(let | abstraction | op(last) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol) | bracket(let) | bracket(abstraction))
 
     def getOne : Parser[AstNode] = {
-        spaced(bracketed(let) | bracketed(abstraction) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol))
+        spaced(bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol))
     }
 
     def first: Parser[AstNode => AstNode] = {
@@ -86,7 +87,7 @@ object FrierenParser extends RegexParsers {
     def number: Parser[AstNode] = """-?\d+""".r ^^ (s => Number(s.toInt))
     def symbol: Parser[Symbol] = """([a-zA-Z_][a-zA-Z_1-9]*)""".r ^^ (s => Symbol(s))
     def symbolList : Parser[List[Symbol]] = spaced("(" ~> rep(spaced(symbol)) <~ ")")
-    def spaced[T](p: Parser[T]): Parser[T] = p <~ """\s*""".r
+    def spaced[T](p: Parser[T]): Parser[T] = debug(p <~ """\s*""".r)
     def bool: Parser[Bool] = "true" ^^ { _ => Bool(true)} | "false" ^^ { _ => Bool(false)}
 
     def block : Parser[Block] = spaced("{") ~> (repsep(spaced(expr),spaced(";")) ^^ {it => Block(it)} ) <~ spaced("}")
@@ -97,13 +98,16 @@ object FrierenParser extends RegexParsers {
 
     def exprApplication: Parser[AstNode] = (spaced("(") ~> bracketed(spaced(application)) <~ spaced(")")) | bracketed(spaced(let) | spaced(abstraction) | spaced(symbol) )
 
-    def application : Parser[Apply] = (spaced(exprApplication) ~ spaced(listList)) ^^{case func ~ lList =>
+    def application : Parser[Apply] = {
+        println("application")
+        (spaced(exprApplication) ~ spaced(listList)) ^^{case func ~ lList =>
             var res: Apply = Apply(func, lList.head)
             lList.tail.foreach(it =>
                 res = Apply(res, it)
             )
             res
         }
+    }
 
     def paraList : Parser[List[Symbol]] = spaced("(") ~> spaced(repsep(spaced(symbol),spaced(","))) <~ spaced(")") | (spaced(symbol)^^{it => List(it)})
     def abstraction : Parser[Abstraction] = {
