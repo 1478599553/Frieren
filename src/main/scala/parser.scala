@@ -87,7 +87,7 @@ object FrierenParser extends RegexParsers {
     def number: Parser[AstNode] = """-?\d+""".r ^^ (s => Number(s.toInt))
     def symbol: Parser[Symbol] = """([a-zA-Z_][a-zA-Z_1-9]*)""".r ^^ (s => Symbol(s))
     def symbolList : Parser[List[Symbol]] = spaced("(" ~> rep(spaced(symbol)) <~ ")")
-    def spaced[T](p: Parser[T]): Parser[T] = debug(p <~ """\s*""".r)
+    def spaced[T](p: Parser[T]): Parser[T] = p <~ """\s*""".r
     def bool: Parser[Bool] = "true" ^^ { _ => Bool(true)} | "false" ^^ { _ => Bool(false)}
 
     def block : Parser[Block] = spaced("{") ~> (repsep(spaced(expr),spaced(";")) ^^ {it => Block(it)} ) <~ spaced("}")
@@ -99,7 +99,6 @@ object FrierenParser extends RegexParsers {
     def exprApplication: Parser[AstNode] = (spaced("(") ~> bracketed(spaced(application)) <~ spaced(")")) | bracketed(spaced(let) | spaced(abstraction) | spaced(symbol) )
 
     def application : Parser[Apply] = {
-        println("application")
         (spaced(exprApplication) ~ spaced(listList)) ^^{case func ~ lList =>
             var res: Apply = Apply(func, lList.head)
             lList.tail.foreach(it =>
