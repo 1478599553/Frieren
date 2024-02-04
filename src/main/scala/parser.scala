@@ -99,7 +99,6 @@ object FrierenParser extends RegexParsers {
     def exprApplication: Parser[AstNode] = (spaced("(") ~> bracketed(spaced(application)) <~ spaced(")")) | bracketed(spaced(let) | spaced(abstraction) | spaced(symbol) )
 
     def application : Parser[Apply] = {
-        println("application")
         (spaced(exprApplication) ~ spaced(listList)) ^^{case func ~ lList =>
             var res: Apply = Apply(func, lList.head)
             lList.tail.foreach(it =>
