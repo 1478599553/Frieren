@@ -17,10 +17,11 @@ def repl(): Unit = {
     println("Goodbye!")
   } else {
     try {
-      println(s"$input => ${FrierenParser.parseToAst(input)}")
-      println(s"${infer(FrierenParser.parseToAst(input))}")
-      println(s"$input => ${interp(FrierenParser.parseToAst(input), Map[Symbol, Value]())}")
-
+      val ast = FrierenParser.parseToAst(input)
+      println(s"parsed to: $ast")
+      println(s"type inferred to: \n${infer(ast)}")
+      println(s"interpreted to: ${interp(ast, Map[String, Value]())}")
+      println(s"compiled to: ${compile(ast)}")
     } catch {
       case e: Throwable =>
         println(s"Error: ${e.getMessage}")

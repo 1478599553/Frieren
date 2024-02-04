@@ -55,6 +55,6 @@ def testInfer(): Unit = {
 
 def testInterp(): Unit = {
     caseList.foreach(it=>
-        println(s"$it => ${interp(FrierenParser.parseToAst(it),Map[Symbol,Value]())}")
+        println(s"$it => ${interp(FrierenParser.parseToAst(it),Map[String,Value]())}")
     )
 }
