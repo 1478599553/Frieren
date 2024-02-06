@@ -1,7 +1,5 @@
 package frieren
 
-import Type.RealType
-
 import java.lang.invoke.WrongMethodTypeException
 
 enum Type {
@@ -32,7 +30,7 @@ enum RType {
 var typeMap: Map[Symbol, SymbolType] = Map()
 var count = 0
 class SymbolType(list: List[(Type, Boolean)]){
-    var typeList: List[(Type, Boolean)] = list
+    private var typeList: List[(Type, Boolean)] = list
     def polymorphic: Boolean = typeList.head._2
     def add(t:(Type, Boolean)): Unit = {
         typeList = typeList.::(t)
@@ -70,83 +68,103 @@ class SymbolType(list: List[(Type, Boolean)]){
 }
 
 class WrongTypeException(message: String) extends Exception(message)
-def infer(input: AstNode): Type = {
+
+def infer(input: AstNode): TypedAstNode = {
+    count = 0
     typeMap = Map()
     env = Map()
-    count = 0
     try {
-        inferNode(input)
-    }catch
-        case w:WrongTypeException => Type.RealType(RType.WrongType(w.getMessage))
-
+        inferToTypedAst(input)
+    } catch
+        case w: WrongTypeException => throw w
 }
 
-def inferNode(input: AstNode): Type = input match{
+trait TypedAstNode{def typ: Type}
+case class TypedSymbol(name: String, typ: Type) extends TypedAstNode
+case class TypedNumber(value: Int, typ: Type) extends TypedAstNode
+case class TypedAdd(value1: TypedAstNode, value2: TypedAstNode, typ: Type) extends TypedAstNode
+case class TypedMul(lhs: TypedAstNode, rhs: TypedAstNode, typ: Type) extends TypedAstNode
+case class TypedAbstraction(param: List[TypedSymbol], body: TypedAstNode, typ: Type) extends TypedAstNode
+case class TypedApply(func: TypedAstNode, arg: List[TypedAstNode], typ: Type) extends TypedAstNode
+case class TypedLet(bindings : List[(TypedSymbol, TypedAstNode)], in : TypedAstNode, typ: Type) extends TypedAstNode
+case class TypedBool(value: Boolean, typ: Type) extends TypedAstNode
+case class TypedBlock(content:List[TypedAstNode], typ: Type) extends TypedAstNode
+
+
+def inferToTypedAst(input: AstNode): TypedAstNode = input match {
     case Abstraction(param, body) =>
         param.foreach(it =>
             count += 1
-            if(typeMap.contains(it)){
+            if (typeMap.contains(it)) {
                 typeMap(it).add((Type.Var(count), false))
-            }else{
+            } else {
                 typeMap += (it -> SymbolType(List((Type.Var(count), false))))
             }
         )
-        val res = solveLambda(param, inferNode(body))
+        val inferredBody: TypedAstNode = inferToTypedAst(body)
+        val res = solveLambda(param, inferredBody.typ)
         param.foreach(it =>
-            if(typeMap(it).remove_isEmpty()){
+            if (typeMap(it).remove_isEmpty()) {
                 typeMap -= it
             }
         )
-        res
+        TypedAbstraction(res._1, inferredBody, res._2)
     case Apply(func, arg) =>
-        solveApplyList(inferNode(func), inferNodeList(arg))
+        val f = inferToTypedAst(func)
+        val a = inferToTypedList(arg)
+        TypedApply(f, a, solveApplyList(f.typ, a.map(_.typ)))
     case variable: Symbol =>
-        typeMap(variable).value
-    case _:Number =>
-        Type.RealType(RType.Int)
-    case _:Bool =>
-        Type.RealType(RType.Bool)
+        TypedSymbol(variable.name, typeMap(variable).value)
+    case number: Number =>
+        TypedNumber(number.value, Type.RealType(RType.Int))
+    case bool: Bool =>
+        TypedBool(bool.value, Type.RealType(RType.Bool))
     case Add(value1, value2) =>
+        val v1: TypedAstNode = inferToTypedAst(value1)
+        val v2: TypedAstNode = inferToTypedAst(value2)
         val add = Type.Arrow(Type.RealType(RType.Int), Type.Arrow(Type.RealType(RType.Int), Type.RealType(RType.Int)))
-        solveApplyList(add, inferNodeList(List(value1, value2)))
+        TypedAdd(v1, v2, solveApplyList(add, List(v1.typ, v2.typ)))
     case Mul(value1, value2) =>
+        val v1: TypedAstNode = inferToTypedAst(value1)
+        val v2: TypedAstNode = inferToTypedAst(value2)
         val mul = Type.Arrow(Type.RealType(RType.Int), Type.Arrow(Type.RealType(RType.Int), Type.RealType(RType.Int)))
-        solveApplyList(mul, inferNodeList(List(value1, value2)))
+        TypedMul(v1, v2, solveApplyList(mul, List(v1.typ, v2.typ)))
     case Let(bindings, in) =>
-        bindings.foreach(it =>
-            val (symbol, astNode) = it
-            val value = inferNode(astNode)
+        var typedBindings: List[(TypedSymbol, TypedAstNode)] = Nil
+        bindings.foreach((symbol, astNode) =>
+            val typed: TypedAstNode = inferToTypedAst(astNode)
+            typedBindings = (TypedSymbol(symbol.name, typed.typ), typed)::typedBindings
             if (typeMap.contains(symbol)) {
-                typeMap(symbol).add((value, true))
+                typeMap(symbol).add((typed.typ, true))
             } else {
-                typeMap += (symbol -> SymbolType(List((value, true))))
+                typeMap += (symbol -> SymbolType(List((typed.typ, true))))
             }
         )
-        val res = inferNode(in)
+        val res = inferToTypedAst(in)
         bindings.foreach(it =>
             val (symbol, astNode) = it
             if (typeMap(symbol).remove_isEmpty()) {
                 typeMap -= symbol
             }
         )
-        res
+        TypedLet(typedBindings.reverse, res, res.typ)
     case Block(content) =>
-        var res: Type = RealType(RType.Unit)
+        var typedContent: List[TypedAstNode] = Nil
         content.foreach(it =>
-            res = inferNode(it)
+            typedContent = inferToTypedAst(it)::typedContent
         )
-        res
+        TypedBlock(typedContent.reverse, typedContent.head.typ)
 }
 
-def inferNodeList(list: List[AstNode]): List[Type] = {
-    list.map(x => inferNode(x))
+def inferToTypedList(list: List[AstNode]): List[TypedAstNode] = {
+    list.map(x => inferToTypedAst(x))
 }
 
-def solveLambda(list: List[Symbol], result:Type):Type = {
-    var t1 = result
+def solveLambda(list: List[Symbol], body: Type):(List[TypedSymbol], Type) = {
+    var t1:(List[TypedSymbol], Type) = (Nil, body)
     val reverse = list.reverse
     reverse.foreach(it =>
-        t1 = Type.Arrow(typeMap(it).value, t1)
+        t1 = (TypedSymbol(it.name, typeMap(it).value)::t1._1, Type.Arrow(typeMap(it).value, t1._2))
     )
     t1
 }
