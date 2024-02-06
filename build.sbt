@@ -7,8 +7,5 @@ lazy val root = (project in file("."))
     name := "Frieren",
     idePackagePrefix := Some("frieren")
   )
-resolvers += "jitpack" at "https://jitpack.io"
-
-libraryDependencies += "com.github.serenadeai" % "java-tree-sitter" % "1.1.2"
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.3.0"
