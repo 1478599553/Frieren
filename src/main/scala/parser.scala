@@ -94,4 +94,3 @@ object FrierenParser extends RegexParsers {
             case w:ParserException => throw new IllegalArgumentException(s"Parsing failed: ${w.getMessage}")
 
 }
-

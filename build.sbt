@@ -7,5 +7,6 @@ lazy val root = (project in file("."))
     name := "Frieren",
     idePackagePrefix := Some("frieren")
   )
+//libraryDependencies += "ch.usi.si.seart" % "java-tree-sitter" % "1.11.0"
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.3.0"
