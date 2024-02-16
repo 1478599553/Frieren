@@ -12,7 +12,7 @@ case class Apply(func: AstNode, arg: List[AstNode]) extends AstNode
 case class Let(bindings : List[(Symbol, AstNode)], in : AstNode) extends AstNode
 case class Bool(value: Boolean) extends AstNode
 case class Block(content:List[AstNode]) extends AstNode
-case class Match(obj: AstNode, Arms: List[(Pattern,AstNode)])
+case class Match(obj: AstNode, Arms: List[(Pattern,AstNode)]) extends AstNode
 
 
 enum Pattern{

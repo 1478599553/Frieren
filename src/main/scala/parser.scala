@@ -2,6 +2,7 @@ package frieren
 
 import scala.util.parsing.combinator.*
 import frieren.*
+import _root_.frieren.Pattern.{ConstructorDestruction, Identifier, WildCard}
 
 object FrierenParser extends RegexParsers {
     def debug[T](p: Parser[T]): Parser[T] = p ^^{it =>
@@ -12,10 +13,10 @@ object FrierenParser extends RegexParsers {
     def bracketed[T](p: Parser[T]): Parser[T] = (spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")) | spaced(p)
 
     def bracket[T](p: Parser[T]): Parser[T] = spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")
-    def expr : Parser[AstNode] = spaced(let | abstraction | op(last) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol) | bracket(let) | bracket(abstraction))
+    def expr : Parser[AstNode] = spaced(matchexpr | let | abstraction | op(last) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol) | bracket(let) | bracket(abstraction) | bracket(matchexpr))
 
     def getOne : Parser[AstNode] = {
-        spaced(bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol))
+        spaced(bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol) | bracket(expr))
     }
 
     def first: Parser[AstNode => AstNode] = {
@@ -80,6 +81,11 @@ object FrierenParser extends RegexParsers {
             | (spaced("(") ~> spaced(repsep(spaced(symbol) ~ (spaced("=") ~> spaced(expr)), spaced(","))) <~ spaced(")")) ^^ (bindings => bindings.map({ case s ~ v => (s, v) }))
     def let : Parser[Let] = (spaced("let") ~> letBindings ~ ((spaced("in") ~> spaced(expr)) | exception("let without in expr"))) ^^ {case bindings ~ body => Let(bindings,body)}
 
+    def matchexpr : Parser[Match] = (spaced("match") ~> spaced(symbol) <~ (spaced("with") | exception("match without with"))) ~ rep(spaced(pattern) ~ spaced(expr) ^^ {case p ~ e => (p, e)}) ^^ {case obj ~ arms => Match(obj, arms)}
+
+    def pattern : Parser[Pattern] = spaced("|") ~> spaced("_") <~ spaced("->") ^^ (_ => WildCard) |
+        spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) <~ spaced("->") ^^ (s => Identifier(s)) |
+        spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) ~ bracket(repsep(spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r), spaced(","))) <~ spaced("->") ^^ {case constructor ~ items => ConstructorDestruction(constructor, items)}
     def exception(message: String): Parser[AstNode] = {
         throw ParserException(message)
     }

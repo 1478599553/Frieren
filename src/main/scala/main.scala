@@ -4,7 +4,6 @@ import scala.annotation.tailrec
 
 @main
 def main(): Unit = {
-  System.load("")
   repl()
 }
 
