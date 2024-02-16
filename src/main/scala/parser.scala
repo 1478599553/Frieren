@@ -60,7 +60,7 @@ object FrierenParser extends RegexParsers {
 
     def listList: Parser[List[List[AstNode]]] = spaced(arguList) ~ spaced(rep(spaced(arguList))) ^^ {case head ~ tail => tail.::(head)}
 
-    def exprApplication: Parser[AstNode] = (spaced("(") ~> bracketed(spaced(application)) <~ spaced(")")) | bracketed(spaced(let) | spaced(abstraction) | spaced(symbol) )
+    def exprApplication: Parser[AstNode] = (spaced("(") ~> bracketed(spaced(application)) <~ spaced(")")) | bracketed(spaced(let) | spaced(abstraction) | spaced(symbol) ) | bracket(expr)
 
     def application : Parser[Apply] = {
         (spaced(exprApplication) ~ spaced(listList)) ^^{case func ~ lList =>
@@ -74,7 +74,7 @@ object FrierenParser extends RegexParsers {
 
     def paraList : Parser[List[Symbol]] = spaced("(") ~> spaced(repsep(spaced(symbol),spaced(","))) <~ spaced(")") | (spaced(symbol)^^{it => List(it)})
     def abstraction : Parser[Abstraction] = {
-        (spaced("fn") ~> spaced(paraList) ~ (spaced("=>") ~> expr )) ^^ { case para ~ body => Abstraction(para, body) }
+        (spaced("fn") ~> spaced(paraList) ~ ((spaced("=>") | exception("fn without =>")) ~> expr )) ^^ { case para ~ body => Abstraction(para, body) }
     }
     
     def letBindings : Parser[List[(Symbol,AstNode)]] = (spaced(symbol) ~ (spaced("=") ~> spaced(expr))) ^^ { case s ~ v => List((s, v)) }
@@ -83,9 +83,9 @@ object FrierenParser extends RegexParsers {
 
     def matchexpr : Parser[Match] = (spaced("match") ~> spaced(symbol) <~ (spaced("with") | exception("match without with"))) ~ rep(spaced(pattern) ~ spaced(expr) ^^ {case p ~ e => (p, e)}) ^^ {case obj ~ arms => Match(obj, arms)}
 
-    def pattern : Parser[Pattern] = spaced("|") ~> spaced("_") <~ spaced("->") ^^ (_ => WildCard) |
-        spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) <~ spaced("->") ^^ (s => Identifier(s)) |
-        spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) ~ bracket(repsep(spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r), spaced(","))) <~ spaced("->") ^^ {case constructor ~ items => ConstructorDestruction(constructor, items)}
+    def pattern : Parser[Pattern] = spaced("|") ~> spaced("_") <~ (spaced("->") | exception("pattern without ->")) ^^ (_ => WildCard) |
+        spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) ~ bracket(repsep(spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r), spaced(","))) <~ (spaced("->") | exception("pattern without ->")) ^^ {case constructor ~ items => ConstructorDestruction(constructor, items)} |
+        spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) <~ (spaced("->") | exception("pattern without ->")) ^^ (s => Identifier(s))
     def exception(message: String): Parser[AstNode] = {
         throw ParserException(message)
     }
