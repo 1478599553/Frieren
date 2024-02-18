@@ -13,7 +13,7 @@ object FrierenParser extends RegexParsers {
     def bracketed[T](p: Parser[T]): Parser[T] = (spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")) | spaced(p)
 
     def bracket[T](p: Parser[T]): Parser[T] = spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")
-    def expr : Parser[AstNode] = spaced(matchexpr | let | abstraction | op(last) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(data) | bracketed(symbol) | bracket(expr))
+    def expr : Parser[AstNode] = spaced(matchexpr | let | abstraction | data | op | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol) | bracket(expr))
 
     def getOne : Parser[AstNode] = {
         spaced(bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol) | bracket(expr))
@@ -24,10 +24,14 @@ object FrierenParser extends RegexParsers {
     }
 
     def last : Parser[AstNode => AstNode] = {
-        getfuncs(spaced(add))
+        getfuncs(spaced(add)) | first
     }
 
-    def op(p : Parser[AstNode => AstNode]) : Parser[AstNode] = {
+    def op: Parser[AstNode] = {
+        spaced(getOne) ~ spaced(last) ^^ { case arg ~ func => func(arg) }
+    }
+
+    def opOrOne(p : Parser[AstNode => AstNode]) : Parser[AstNode] = {
         spaced(getOne) ~ p ^^ {case arg ~ func => func(arg)} | spaced(getOne)
     }
     def getfuncs(p : Parser[AstNode => AstNode]) : Parser[AstNode => AstNode] = {
@@ -41,7 +45,7 @@ object FrierenParser extends RegexParsers {
         }
     }
     def add: Parser[AstNode => Add] = {
-        spaced("+") ~> spaced(op(first)) ^^ {v2 => v1 => Add(v1, v2)}
+        spaced("+") ~> spaced(opOrOne(first)) ^^ { v2 => v1 => Add(v1, v2)}
     }
 
     def mul: Parser[AstNode => Mul] = {
