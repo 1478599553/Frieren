@@ -13,7 +13,7 @@ object FrierenParser extends RegexParsers {
     def bracketed[T](p: Parser[T]): Parser[T] = (spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")) | spaced(p)
 
     def bracket[T](p: Parser[T]): Parser[T] = spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")
-    def expr : Parser[AstNode] = spaced(matchexpr | let | abstraction | op(last) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracket(data) | bracketed(symbol) | bracket(let) | bracket(abstraction) | bracket(matchexpr))
+    def expr : Parser[AstNode] = spaced(matchexpr | let | abstraction | op(last) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(data) | bracketed(symbol) | bracket(expr))
 
     def getOne : Parser[AstNode] = {
         spaced(bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol) | bracket(expr))
