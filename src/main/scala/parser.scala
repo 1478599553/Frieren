@@ -13,7 +13,7 @@ object FrierenParser extends RegexParsers {
     def bracketed[T](p: Parser[T]): Parser[T] = (spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")) | spaced(p)
 
     def bracket[T](p: Parser[T]): Parser[T] = spaced("(") ~> bracketed(spaced(p)) <~ spaced(")")
-    def expr : Parser[AstNode] = spaced(matchexpr | let | abstraction | op(last) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol) | bracket(let) | bracket(abstraction) | bracket(matchexpr))
+    def expr : Parser[AstNode] = spaced(matchexpr | let | abstraction | op(last) | bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracket(data) | bracketed(symbol) | bracket(let) | bracket(abstraction) | bracket(matchexpr))
 
     def getOne : Parser[AstNode] = {
         spaced(bracketed(application) | bracketed(number) | bracketed(bool) | bracketed(block) | bracketed(symbol) | bracket(expr))
@@ -80,6 +80,9 @@ object FrierenParser extends RegexParsers {
     def letBindings : Parser[List[(Symbol,AstNode)]] = (spaced(symbol) ~ (spaced("=") ~> spaced(expr))) ^^ { case s ~ v => List((s, v)) }
             | (spaced("(") ~> spaced(repsep(spaced(symbol) ~ (spaced("=") ~> spaced(expr)), spaced(","))) <~ spaced(")")) ^^ (bindings => bindings.map({ case s ~ v => (s, v) }))
     def let : Parser[Let] = (spaced("let") ~> letBindings ~ ((spaced("in") ~> spaced(expr)) | exception("let without in expr"))) ^^ {case bindings ~ body => Let(bindings,body)}
+    //data shape = Circle of int * int
+    def constructor : Parser[(String,List[String])] = spaced(symbol) ~ (spaced("of") ~> repsep(spaced(symbol),spaced("*"))) ^^ {case Symbol(constructor) ~ paraTypeList => (constructor,paraTypeList.map({case Symbol(name)=>name}))}
+    def data : Parser[Data] = (spaced("data") ~> spaced(symbol) ~ (spaced("=") ~> repsep(spaced(constructor),spaced("|"))) ^^ {case Symbol(name) ~ con => Data(name,con)})
 
     def matchexpr : Parser[Match] = (spaced("match") ~> spaced(symbol) <~ (spaced("with") | exception("match without with"))) ~ rep(spaced(pattern) ~ spaced(expr) ^^ {case p ~ e => (p, e)}) ^^ {case obj ~ arms => Match(obj, arms)}
 
