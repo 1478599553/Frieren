@@ -1,4 +1,7 @@
 package frieren
+
+import scala.collection.mutable.ListBuffer
+
 def compile(expr:AstNode) : String = {
     expr match
         case Symbol(name) => name
@@ -17,7 +20,44 @@ def compile(expr:AstNode) : String = {
                |""".stripMargin
         case Bool(value) =>value.toString
         case Block(content) => ???
-        case Match(obj, arms) => ???
+        case Match(obj, arms) =>
+            s"""
+               |${arms.map({case (p,v) =>{
+                p match
+                    case Pattern.ConstructorDeconstruction(constructor, tupleItems) => ???
+                    case Pattern.Identifier(ident) => ???
+                    case Pattern.WildCard => ???
+            } })}
+               |""".stripMargin
+        case Data(name,constructors) =>
+            s"""
+               |struct $name {
+               |short flag;
+               |union {
+               |${constructors.map(
+                {case (name,member)=>
+                    s"""
+                       |struct {
+                       |${member.map(typename => s"$typename ${genName()};\n").mkString}
+                       |}$name;
+                       |""".stripMargin
+                }
+            ).mkString}
+               |    }v;
+               |};
+               |${constructors.map({case (cName,member) =>
+                val paraList = ListBuffer.empty[String]
+            s"""
+                   |auto $cName = [&](${member.map(it => {
+                val pName = genName();
+                paraList.addOne(pName);
+                s"$it $pName"
+            }).mkString(",")}){
+                   |        return $name{${constructors.map({ case (consName, _) => consName }).indexOf(cName)},{.$cName={ ${paraList.mkString(",")} }}};
+                   |    };
+                   |""".stripMargin
+            })}
+               |""".stripMargin
 
 }
 
@@ -33,4 +73,10 @@ def toCppType(typ:Type): String = {
                 case RType.Bool => "bool"
                 case RType.Unit => "unit"
                 case RType.WrongType(message) => ???
+}
+
+var count = 0
+def genName(): String = {
+    count += 1
+    "v"+count
 }

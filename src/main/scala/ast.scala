@@ -16,7 +16,7 @@ case class Match(obj: AstNode, arms: List[(Pattern,AstNode)]) extends AstNode
 case class Data(name:String , constructors : List[(String,List[String])]) extends AstNode
 
 enum Pattern{
-    case ConstructorDestruction(constructor: String, tupleItems:List[String]) extends Pattern
+    case ConstructorDeconstruction(constructor: String, tupleItems:List[Pattern]) extends Pattern
     case Identifier(ident:String) extends Pattern
     case WildCard extends Pattern
 }

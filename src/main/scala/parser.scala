@@ -91,7 +91,7 @@ object FrierenParser extends RegexParsers {
     def matchexpr : Parser[Match] = (spaced("match") ~> spaced(symbol) <~ (spaced("with") | exception("match without with"))) ~ rep(spaced(pattern) ~ spaced(expr) ^^ {case p ~ e => (p, e)}) ^^ {case obj ~ arms => Match(obj, arms)}
 
     def pattern : Parser[Pattern] = spaced("|") ~> spaced("_") <~ (spaced("->") | exception("pattern without ->")) ^^ (_ => WildCard) |
-        spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) ~ bracket(repsep(spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r), spaced(","))) <~ (spaced("->") | exception("pattern without ->")) ^^ {case constructor ~ items => ConstructorDestruction(constructor, items)} |
+        spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) ~ bracket(repsep(spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r), spaced(","))) <~ (spaced("->") | exception("pattern without ->")) ^^ {case constructor ~ items => ConstructorDeconstruction(constructor, items)} |
         spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) <~ (spaced("->") | exception("pattern without ->")) ^^ (s => Identifier(s))
     def exception(message: String): Parser[AstNode] = {
         throw ParserException(message)
