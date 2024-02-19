@@ -1,3 +1,4 @@
+
 package frieren
 
 enum Type {
@@ -13,6 +14,8 @@ enum Type {
                 s"${l.toString}->${r.toString}"
             case Type.Var(num) =>
                 s"t$num"
+            case Type.RealType(data: RType.Data) =>
+                s"${data.name}"
             case Type.RealType(rType) =>
                 s"$rType"
     }
@@ -27,12 +30,12 @@ enum RType {
 }
 
 var lasttypeMap: Map[Symbol, TypeList] = Map()
-var lastdataMap: Map[String, Map[String, TypeList]] = Map()
+var lasttypeMapList: List[Map[Symbol, TypeList]] = List(Map())
 var lastenv: Map[Type.Var, Type] = Map()
 var lastcount = 0
 
 var typeMap: Map[Symbol, TypeList] = Map()
-var dataMap: Map[String, Map[String, TypeList]] = Map()
+var typeMapList: List[Map[Symbol, TypeList]] = List(Map())
 var env: Map[Type.Var, Type] = Map()
 var cnt = 0
 class TypeList(list: List[(Type, Boolean)]){
@@ -73,15 +76,24 @@ class TypeList(list: List[(Type, Boolean)]){
     }
 }
 
+def getSymbolType(symbol: Symbol): Type = {
+    if (!typeMap.contains(symbol)) {
+        throw new WrongTypeException(s"${symbol.name} is not defined")
+    }
+    typeMap(symbol).value
+}
+
 class WrongTypeException(message: String) extends Exception(message)
 
 def infer(input: AstNode): TypedAstNode = {
     typeMap = lasttypeMap
+    typeMapList = lasttypeMapList
     env = lastenv
     cnt = lastcount
     try {
         val res = inferToTypedAst(input)
         lasttypeMap = typeMap
+        lasttypeMapList = typeMapList
         lastenv = env
         lastcount = cnt
         res
@@ -126,10 +138,7 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
         val a = inferToTypedList(arg)
         TypedApply(f, a, solveApplyList(f.typ, a.map(_.typ)))
     case variable: Symbol =>
-        if(!typeMap.contains(variable)){
-            throw new WrongTypeException(s"${variable.name} is not defined")
-        }
-        TypedSymbol(variable.name, typeMap(variable).value)
+        TypedSymbol(variable.name, getSymbolType(variable))
     case number: Number =>
         TypedNumber(number.value, Type.RealType(RType.Int))
     case bool: Bool =>
@@ -170,7 +179,25 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
         )
         TypedBlock(typedContent.reverse, typedContent.head.typ)
     case Match(obj, arms) =>
-        ???
+        val typedobj = inferToTypedAst(obj)
+        typeMapList = typeMap::typeMapList
+        val type0: Type = solvePattern(arms.head._1)
+        var list: List[(Pattern,TypedAstNode)] = List((arms.head._1, inferToTypedAst(arms.head._2)))
+        typeMap = typeMapList.head
+        typeMapList = typeMapList.tail
+        val armtype: Type = list.head._2.typ
+        arms.tail.foreach((pattern, ast) => {
+            typeMapList = typeMap::typeMapList
+            val type1: Type = solvePattern(pattern)
+            if(type1 != null && type0 != type1) throw new WrongTypeException(s"$type0 != $type1")
+            list = (pattern, inferToTypedAst(ast))::list
+            if(armtype != list.head._2.typ) throw new WrongTypeException(s"Require $armtype, but found ${list.head._2.typ}")
+            typeMap = typeMapList.head
+            typeMapList = typeMapList.tail
+        })
+        solveEquation(typedobj.typ, type0)
+        updateSymbolType()
+        TypedMatch(typedobj, list, armtype)
     case Data(name, constructors) =>
         val typ = Type.RealType(RType.Data(name))
         def cons(list: List[String], end: Type): Type = list match{
@@ -193,6 +220,37 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
             }
         })
         TypedData(name, constructors, typ)
+}
+
+def solvePattern(pattern: Pattern): Type = pattern match {
+    case Pattern.ConstructorDeconstruction(constructor, tupleItems) =>
+        var typ = getSymbolType(Symbol(constructor))
+        tupleItems.foreach(it =>
+            val type1:Type = typ match{
+                case Type.Arrow(l, r) =>
+                    typ = r
+                    l
+                case _ =>
+                    throw new WrongTypeException(s"$constructor receives too many items")
+            }
+            it match
+                case c: Pattern.ConstructorDeconstruction =>
+                    val next = solvePattern(c)
+                    if(next != type1) throw new WrongTypeException(s"Require $type1, but found $next")
+                case i: Pattern.Identifier =>
+                    val symbol = Symbol(i.ident)
+                    if (typeMap.contains(symbol)) {
+                        typeMap(symbol).add((type1, false))
+                    } else {
+                        typeMap += (symbol -> TypeList(List((type1, false))))
+                    }
+                case _ =>
+        )
+        typ match
+            case _: Type.Arrow => throw new WrongTypeException(s"$constructor receives too few items")
+            case _ => typ
+    case i: Pattern.Identifier => getSymbolType(Symbol(i.ident))
+    case _ => null
 }
 
 def inferToTypedList(list: List[AstNode]): List[TypedAstNode] = {
@@ -223,66 +281,64 @@ def updateInEnv(input: Type): Type = input match {
         re
 }
 
+def solveEquation(l: Type, r: Type): Unit = updateInEnv(l) match {
+    case Type.Arrow(ll, lr) =>
+        updateInEnv(r) match {
+            case Type.Arrow(rl, rr) =>
+                solveEquation(ll, rl)
+                solveEquation(lr, rr)
+            case v: Type.Var =>
+                checkSelfLoop(v, Type.Arrow(ll, lr))
+                env += (v -> l)
+            case re: Type.RealType =>
+                throw new WrongTypeException(s"$re can't apply")
+        }
+    case v: Type.Var =>
+        updateInEnv(r) match
+            case a: Type.Arrow =>
+                checkSelfLoop(v, a)
+                env += (v -> a)
+            case rv: Type.Var =>
+                if (v != rv) {
+                    env += (v -> rv)
+                }
+            case re: Type.RealType =>
+                env += (v -> re)
+    case re: Type.RealType =>
+        updateInEnv(r) match {
+            case v: Type.Var =>
+                env += (v -> re)
+            case re1: Type.RealType =>
+                if (re != re1) {
+                    throw new WrongTypeException(s"Require $re, but found $re1")
+                }
+            case arrow: Type.Arrow =>
+                throw new WrongTypeException(s"Require $re, but found $arrow")
+        }
+}
+
+def updateSymbolType(): Unit = {
+    typeMap.foreach((symbol, symbolType) =>
+        if (!symbolType.polymorphic) {
+            symbolType.update(updateInEnv(symbolType.value))
+        }
+    )
+}
+
 def solveApplyList(func: Type, arg: List[Type]): Type = {
-
-
-    def updateSymbol():Unit = {
-        typeMap.foreach((symbol, symbolType) =>
-            if(!symbolType.polymorphic){
-                symbolType.update(updateInEnv(symbolType.value))
-            }
-        )
-    }
-
-    def solveEquation(l: Type, r: Type): Unit = updateInEnv(l) match {
-        case Type.Arrow(ll, lr) =>
-            updateInEnv(r) match {
-                case Type.Arrow(rl, rr) =>
-                    solveEquation(ll, rl)
-                    solveEquation(lr, rr)
-                case v: Type.Var =>
-                    checkSelfLoop(v, Type.Arrow(ll, lr))
-                    env += (v -> l)
-                case re: Type.RealType =>
-                    throw new WrongTypeException(s"$re can't apply")
-            }
-        case v: Type.Var =>
-            updateInEnv(r) match
-                case a: Type.Arrow =>
-                    checkSelfLoop(v, a)
-                    env += (v -> a)
-                case rv: Type.Var =>
-                    if (v != rv) {
-                        env += (v -> rv)
-                    }
-                case re: Type.RealType =>
-                    env += (v -> re)
-        case re: Type.RealType =>
-            updateInEnv(r) match {
-                case v: Type.Var =>
-                    env += (v -> re)
-                case re1: Type.RealType =>
-                    if (re != re1) {
-                        throw new WrongTypeException(s"Require $re, but found $re1")
-                    }
-                case arrow: Type.Arrow =>
-                    throw new WrongTypeException(s"Require $re, but found $arrow")
-
-            }
-    }
 
     def solveApply(l: Type, r: Type): Type = {
         updateInEnv(l) match {
             case Type.Arrow(left, right) =>
                 solveEquation(left, r)
-                updateSymbol()
+                updateSymbolType()
                 updateInEnv(right)
             case v: Type.Var =>
                 cnt += 1
                 val t1 = Type.Arrow(r, Type.Var(cnt))
                 checkSelfLoop(v, t1)
                 env += (v -> t1)
-                updateSymbol()
+                updateSymbolType()
                 Type.Var(cnt)
             case re: Type.RealType =>
                 throw new WrongTypeException(s"$re can't apply")
