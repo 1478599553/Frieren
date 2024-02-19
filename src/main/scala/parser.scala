@@ -88,11 +88,11 @@ object FrierenParser extends RegexParsers {
     def constructor : Parser[(String,List[String])] = spaced(symbol) ~ (spaced("of") ~> repsep(spaced(symbol),spaced("*"))) ^^ {case Symbol(constructor) ~ paraTypeList => (constructor,paraTypeList.map({case Symbol(name)=>name}))} | spaced(symbol) ^^{case Symbol(constructor) => (constructor, List())}
     def data : Parser[Data] = (spaced("data") ~> spaced(symbol) ~ (spaced("=") ~> repsep(spaced(constructor),spaced("|"))) ^^ {case Symbol(name) ~ con => Data(name,con)})
 
-    def matchexpr : Parser[Match] = (spaced("match") ~> spaced(symbol) <~ (spaced("with") | exception("match without with"))) ~ rep(spaced(pattern) ~ spaced(expr) ^^ {case p ~ e => (p, e)}) ^^ {case obj ~ arms => Match(obj, arms)}
+    def matchexpr : Parser[Match] = (spaced("match") ~> spaced(symbol) <~ (spaced("with") | exception("match without with"))) ~ rep((spaced("|") ~> spaced(pattern) <~ (spaced("->") | exception("1pattern without ->"))) ~ spaced(expr) ^^ {case p ~ e => (p, e)}) ^^ {case obj ~ arms => Match(obj, arms)}
 
-    def pattern : Parser[Pattern] = spaced("|") ~> spaced("_") <~ (spaced("->") | exception("pattern without ->")) ^^ (_ => WildCard) |
-        spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) ~ bracket(repsep(spaced(pattern), spaced(","))) <~ (spaced("->") | exception("pattern without ->")) ^^ {case constructor ~ items => ConstructorDeconstruction(constructor, items)} |
-        spaced("|") ~> spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) <~ (spaced("->") | exception("pattern without ->")) ^^ (s => Identifier(s))
+    def pattern : Parser[Pattern] = spaced("_") ^^ (_ => WildCard) |
+        spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) ~ bracket(repsep(spaced(pattern), spaced(","))) ^^ {case constructor ~ items => ConstructorDeconstruction(constructor, items)} |
+        spaced("""([a-zA-Z_][a-zA-Z_1-9]*)""".r) ^^ (s => Identifier(s))
     def exception(message: String): Parser[AstNode] = {
         throw ParserException(message)
     }
