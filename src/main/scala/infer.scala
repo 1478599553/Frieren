@@ -1,7 +1,5 @@
 package frieren
 
-import java.lang.invoke.WrongMethodTypeException
-
 enum Type {
     case Arrow(left: Type, right:Type)
     case Var(num: Int)
@@ -24,12 +22,20 @@ enum RType {
     case Int
     case Bool
     case Unit
+    case Data(name: String)
     case WrongType(message: String)
 }
 
-var typeMap: Map[Symbol, SymbolType] = Map()
-var count = 0
-class SymbolType(list: List[(Type, Boolean)]){
+var lasttypeMap: Map[Symbol, TypeList] = Map()
+var lastdataMap: Map[String, Map[String, TypeList]] = Map()
+var lastenv: Map[Type.Var, Type] = Map()
+var lastcount = 0
+
+var typeMap: Map[Symbol, TypeList] = Map()
+var dataMap: Map[String, Map[String, TypeList]] = Map()
+var env: Map[Type.Var, Type] = Map()
+var cnt = 0
+class TypeList(list: List[(Type, Boolean)]){
     private var typeList: List[(Type, Boolean)] = list
     def polymorphic: Boolean = typeList.head._2
     def add(t:(Type, Boolean)): Unit = {
@@ -50,8 +56,8 @@ class SymbolType(list: List[(Type, Boolean)]){
                     if(env.contains(v)){
                         env(v)
                     }else{
-                        count += 1
-                        val res:Type.Var = Type.Var(count)
+                        cnt += 1
+                        val res:Type.Var = Type.Var(cnt)
                         env += (v -> res)
                         res
                     }
@@ -70,13 +76,18 @@ class SymbolType(list: List[(Type, Boolean)]){
 class WrongTypeException(message: String) extends Exception(message)
 
 def infer(input: AstNode): TypedAstNode = {
-    count = 0
-    typeMap = Map()
-    env = Map()
+    typeMap = lasttypeMap
+    env = lastenv
+    cnt = lastcount
     try {
-        inferToTypedAst(input)
+        val res = inferToTypedAst(input)
+        lasttypeMap = typeMap
+        lastenv = env
+        lastcount = cnt
+        res
     } catch
         case w: WrongTypeException => throw w
+
 }
 
 trait TypedAstNode{def typ: Type}
@@ -89,16 +100,17 @@ case class TypedApply(func: TypedAstNode, arg: List[TypedAstNode], typ: Type) ex
 case class TypedLet(bindings : List[(TypedSymbol, TypedAstNode)], in : TypedAstNode, typ: Type) extends TypedAstNode
 case class TypedBool(value: Boolean, typ: Type) extends TypedAstNode
 case class TypedBlock(content:List[TypedAstNode], typ: Type) extends TypedAstNode
-
+case class TypedMatch(obj: TypedAstNode, arms: List[(Pattern,TypedAstNode)], typ: Type) extends TypedAstNode
+case class TypedData(name:String , constructors : List[(String,List[String])], typ: Type) extends TypedAstNode
 
 def inferToTypedAst(input: AstNode): TypedAstNode = input match {
     case Abstraction(param, body) =>
         param.foreach(it =>
-            count += 1
+            cnt += 1
             if (typeMap.contains(it)) {
-                typeMap(it).add((Type.Var(count), false))
+                typeMap(it).add((Type.Var(cnt), false))
             } else {
-                typeMap += (it -> SymbolType(List((Type.Var(count), false))))
+                typeMap += (it -> TypeList(List((Type.Var(cnt), false))))
             }
         )
         val inferredBody: TypedAstNode = inferToTypedAst(body)
@@ -114,6 +126,9 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
         val a = inferToTypedList(arg)
         TypedApply(f, a, solveApplyList(f.typ, a.map(_.typ)))
     case variable: Symbol =>
+        if(!typeMap.contains(variable)){
+            throw new WrongTypeException(s"${variable.name} is not defined")
+        }
         TypedSymbol(variable.name, typeMap(variable).value)
     case number: Number =>
         TypedNumber(number.value, Type.RealType(RType.Int))
@@ -137,7 +152,7 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
             if (typeMap.contains(symbol)) {
                 typeMap(symbol).add((typed.typ, true))
             } else {
-                typeMap += (symbol -> SymbolType(List((typed.typ, true))))
+                typeMap += (symbol -> TypeList(List((typed.typ, true))))
             }
         )
         val res = inferToTypedAst(in)
@@ -154,6 +169,30 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
             typedContent = inferToTypedAst(it)::typedContent
         )
         TypedBlock(typedContent.reverse, typedContent.head.typ)
+    case Match(obj, arms) =>
+        ???
+    case Data(name, constructors) =>
+        val typ = Type.RealType(RType.Data(name))
+        def cons(list: List[String], end: Type): Type = list match{
+            case ::(head, next) =>
+                val h: Type = head match
+                    case "Int" => Type.RealType(RType.Int)
+                    case "Bool" => Type.RealType(RType.Bool)
+                    case "Unit" => Type.RealType(RType.Unit)
+                    case data => Type.RealType(RType.Data(data))
+                Type.Arrow(h, cons(next, end))
+            case Nil => end
+        }
+        constructors.foreach((name1, list) =>{
+            val symbol = Symbol(name1)
+            val typ1: Type = cons(list, typ)
+            if (typeMap.contains(symbol)) {
+                typeMap(symbol).add((typ1, true))
+            } else {
+                typeMap += (symbol -> TypeList(List((typ1, true))))
+            }
+        })
+        TypedData(name, constructors, typ)
 }
 
 def inferToTypedList(list: List[AstNode]): List[TypedAstNode] = {
@@ -169,7 +208,6 @@ def solveLambda(list: List[Symbol], body: Type):(List[TypedSymbol], Type) = {
     t1
 }
 
-var env: Map[Type.Var, Type] = Map()
 def updateInEnv(input: Type): Type = input match {
     case v: Type.Var =>
         if (env.contains(v)) {
@@ -240,12 +278,12 @@ def solveApplyList(func: Type, arg: List[Type]): Type = {
                 updateSymbol()
                 updateInEnv(right)
             case v: Type.Var =>
-                count += 1
-                val t1 = Type.Arrow(r, Type.Var(count))
+                cnt += 1
+                val t1 = Type.Arrow(r, Type.Var(cnt))
                 checkSelfLoop(v, t1)
                 env += (v -> t1)
                 updateSymbol()
-                Type.Var(count)
+                Type.Var(cnt)
             case re: Type.RealType =>
                 throw new WrongTypeException(s"$re can't apply")
         }
