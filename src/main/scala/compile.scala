@@ -12,25 +12,35 @@ def compile(expr:TypedAstNode) : String = {
         case TypedAbstraction(param, body, typ) => {
             var paraTypes = ListBuffer.empty[String]
 
-            typ match
-                case Type.Arrow(left, Type.Arrow(_, _)) => 
-                case Type.Arrow(left, next) => ???
-                case Type.Var(num) => paraTypes.addOne("auto")
-                case Type.RealType(name) => paraTypes.addOne(name)
+            def getType(typ: Type): Unit = typ match{
+                case Type.Arrow(left, right) =>
+                    left match{
+                        case Type.RealType(rType) => rType match{
+                            case RType.Int => paraTypes.addOne("int")
+                            case RType.Bool => paraTypes.addOne("bool")
+                            case RType.Unit => paraTypes.addOne("void")
+                            case RType.Data(name) => ???
+                        }
+                    }
+                    getType(right)
+                case _ =>
+            }
 
-                s"[&](${param.map({ case Symbol(it) => it }).map(it => s"auto $it").mkString(",")}) {return ${compile(body)};}"
+            getType(typ)
+
+            s"[&](${param.map({ case Symbol(it) => it }).map(it => s"auto $it").mkString(",")}) {return ${compile(body)};}"
         }
         case TypedAdd(value1, value2, typ) =>s"${compile(value1)}+${compile(value2)}"
-        case TypedApply(func, arg, typ) =>
-        case TypedBlock(content, typ) =>
-        case TypedBool(value, typ) =>
-        case TypedData(name, constructors, typ) =>
-        case TypedLet(bindings, in, typ) =>
-        case TypedMatch(obj, arms, typ) =>
+        case TypedApply(func, arg, typ) => ???
+        case TypedBlock(content, typ) => ???
+        case TypedBool(value, typ) => ???
+        case TypedData(name, constructors, typ) => ???
+        case TypedLet(bindings, in, typ) => ???
+        case TypedMatch(obj, arms, typ) => ???
         case TypedMul(lhs, rhs, typ) => s"${compile(lhs)}*${compile(rhs)}"
         case TypedNumber(value, typ) => value.toString
         case TypedSymbol(name, typ) => name
-        case _ =>
+        case _ => ???
     /*
     expr match
         case Symbol(name) => name

@@ -26,7 +26,6 @@ enum RType {
     case Bool
     case Unit
     case Data(name: String)
-    case WrongType(message: String)
 }
 
 var lasttypeMap: Map[Symbol, TypeList] = Map()
@@ -128,6 +127,34 @@ case class TypedBool(value: Boolean, typ: Type) extends TypedAstNode
 case class TypedBlock(content:List[TypedAstNode], typ: Type) extends TypedAstNode
 case class TypedMatch(obj: TypedAstNode, arms: List[(Pattern,TypedAstNode)], typ: Type) extends TypedAstNode
 case class TypedData(name:String , constructors : List[(String,List[String])], typ: Type) extends TypedAstNode
+
+
+def prettyPrint(typedAstNode: TypedAstNode): String = {
+    val s: StringBuilder = new StringBuilder()
+    typedAstNode match {
+        case TypedAbstraction(param, body, typ) =>
+            s.append("fn ")
+            if(param.isEmpty){
+                s.append("()")
+            }else if(param.tail.isEmpty){
+                s.append(param.head.name).append(": ").append(typ)
+            }else{
+                s.append("(")
+                param.foreach(it =>
+                    s.append(it.name).append(": ").append(typ)
+                )
+            }
+        case symbol: TypedSymbol =>
+            s.append(symbol.name)
+        case TypedData(name, constructors, typ) => //data List = |Cons of
+            s.append(s"data $name = ${constructors.head._1} ")
+            if(constructors.head._2.nonEmpty){
+                s.append("of ")
+            }
+    }
+    s.toString()
+
+}
 
 def inferToTypedAst(input: AstNode): TypedAstNode = input match {
     case Abstraction(param, body) =>
