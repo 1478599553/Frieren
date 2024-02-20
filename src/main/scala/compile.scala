@@ -70,7 +70,7 @@ def compile(expr:AstNode) : String = {
                |${constructors.map({case (cName,member) =>
 
             s"""
-                   |auto $cName = [&](${member.zipWithIndex.map({ case (it,index) => s"auto v$index"}).mkString(",")}) -> $name* {
+                   |auto $cName = [&](${member.zipWithIndex.map({ case (it,index) => s"${if isStruct.contains(it) then it+"*" else it} v$index"}).mkString(",")}) -> $name* {
                    |        return new $name{${constructors.map({ case (consName, _) => consName }).indexOf(cName)},{.$cName={ ${member.zipWithIndex.map("v"+_._2).mkString(",")} }}};
                    |    };
                    |""".stripMargin
