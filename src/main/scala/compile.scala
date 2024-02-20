@@ -5,6 +5,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 var dataDefList = ListBuffer.empty[Data]
 var isStruct = ListBuffer.empty[String]
+var zeroParaConstructors = ListBuffer.empty[String]
 
 def compile(expr:AstNode) : String = {
     expr match
@@ -50,6 +51,7 @@ def compile(expr:AstNode) : String = {
                |""".stripMargin
         case data@Data(name,constructors) =>
             dataDefList.addOne(data)
+            data.constructors.foreach{case (consName,cons)=>if cons.isEmpty then zeroParaConstructors.addOne(consName)}
             data.constructors.map { case (_, members) => members }.foreach(list=>list.foreach(it=>if dataDefList.map { case Data(name, _) => name }.contains(it) then isStruct.addOne(it)))
 
             s"""
@@ -68,15 +70,21 @@ def compile(expr:AstNode) : String = {
                |    }v;
                |};
                |${constructors.map({case (cName,member) =>
+                if member.nonEmpty then
 
-            s"""
-                   |auto $cName = [&](${member.zipWithIndex.map({ case (it,index) => s"${if isStruct.contains(it) then it+"*" else it} v$index"}).mkString(",")}) -> $name* {
-                   |        return new $name{${constructors.map({ case (consName, _) => consName }).indexOf(cName)},{.$cName={ ${member.zipWithIndex.map("v"+_._2).mkString(",")} }}};
-                   |    };
-                   |""".stripMargin
-            }).mkString}
-               |""".stripMargin
+                    s"""
+                           |auto $cName = [&](${member.zipWithIndex.map({ case (it,index) => s"${if isStruct.contains(it) then it+"*" else it} v$index"}).mkString(",")}) -> $name* {
+                           |        return new $name{${constructors.map({ case (consName, _) => consName }).indexOf(cName)},{.$cName={ ${member.zipWithIndex.map("v"+_._2).mkString(",")} }}};
+                           |    };
+                           |""".stripMargin
 
+                else
+                    s"""
+                       |$name* $cName = new $name{${constructors.map({ case (consName, _) => consName }).indexOf(cName)},{.$cName={}}};
+                       |""".stripMargin
+                    }).mkString
+            }
+                       |""".stripMargin
 }
 
 def getPatternCond(pattern: Pattern): String => String = {
@@ -90,7 +98,11 @@ def getPatternCond(pattern: Pattern): String => String = {
                 buffer.addOne(s"$obj->flag==$index")
                 tupleItems.zipWithIndex.foreach{case (p,index) => buffer.addOne(getPatternCond(p)(s"$objName.v$index"))}
                 buffer.mkString("&&")
-            case Pattern.Identifier(ident) => "true"
+            case Pattern.Identifier(ident) =>
+                if zeroParaConstructors.contains(ident)
+                    then
+                        s"$obj == $ident"
+                else "true"
             case Pattern.WildCard => "true"
 }
 def getPatternAssign(pattern: Pattern): String => String = {
@@ -102,7 +114,10 @@ def getPatternAssign(pattern: Pattern): String => String = {
 
                 tupleItems.zipWithIndex.foreach{case (p,i) => buffer.addOne(getPatternAssign(p)(s"$objName.v$i"))}
                 buffer.mkString
-            case Pattern.Identifier(ident) => s"auto $ident = $obj;\n"
+            case Pattern.Identifier(ident) =>
+                if ! zeroParaConstructors.contains(ident) then
+                s"auto $ident = $obj;\n"
+                else ""
             case Pattern.WildCard => ""
 }
 
