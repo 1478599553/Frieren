@@ -7,7 +7,31 @@ var dataDefList = ListBuffer.empty[Data]
 var isStruct = ListBuffer.empty[String]
 var zeroParaConstructors = ListBuffer.empty[String]
 
-def compile(expr:AstNode) : String = {
+def compile(expr:TypedAstNode) : String = {
+    expr match
+        case TypedAbstraction(param, body, typ) => {
+            var paraTypes = ListBuffer.empty[String]
+
+            typ match
+                case Type.Arrow(left, Type.Arrow(_, _)) => 
+                case Type.Arrow(left, next) => ???
+                case Type.Var(num) => paraTypes.addOne("auto")
+                case Type.RealType(name) => paraTypes.addOne(name)
+
+                s"[&](${param.map({ case Symbol(it) => it }).map(it => s"auto $it").mkString(",")}) {return ${compile(body)};}"
+        }
+        case TypedAdd(value1, value2, typ) =>s"${compile(value1)}+${compile(value2)}"
+        case TypedApply(func, arg, typ) =>
+        case TypedBlock(content, typ) =>
+        case TypedBool(value, typ) =>
+        case TypedData(name, constructors, typ) =>
+        case TypedLet(bindings, in, typ) =>
+        case TypedMatch(obj, arms, typ) =>
+        case TypedMul(lhs, rhs, typ) => s"${compile(lhs)}*${compile(rhs)}"
+        case TypedNumber(value, typ) => value.toString
+        case TypedSymbol(name, typ) => name
+        case _ =>
+    /*
     expr match
         case Symbol(name) => name
         case Number(value) =>value.toString
@@ -85,6 +109,8 @@ def compile(expr:AstNode) : String = {
                     }).mkString
             }
                        |""".stripMargin
+*/
+
 }
 
 def getPatternCond(pattern: Pattern): String => String = {
@@ -129,3 +155,4 @@ def getIndex(cons:String): Int = {
     })
     res
 }
+
