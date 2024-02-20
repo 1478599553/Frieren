@@ -83,6 +83,20 @@ def getSymbolType(symbol: Symbol): Type = {
     typeMap(symbol).value
 }
 
+def addSymbolType(symbol: Symbol, typ: Type, polymorphic: Boolean): Unit = {
+    if (typeMap.contains(symbol)) {
+        typeMap(symbol).add((typ, polymorphic))
+    } else {
+        typeMap += (symbol -> TypeList(List((typ, polymorphic))))
+    }
+}
+
+def removeSymbolType(symbol: Symbol): Unit = {
+    if (typeMap(symbol).remove_isEmpty()) {
+        typeMap -= symbol
+    }
+}
+
 class WrongTypeException(message: String) extends Exception(message)
 
 def infer(input: AstNode): TypedAstNode = {
@@ -119,18 +133,12 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
     case Abstraction(param, body) =>
         param.foreach(it =>
             cnt += 1
-            if (typeMap.contains(it)) {
-                typeMap(it).add((Type.Var(cnt), false))
-            } else {
-                typeMap += (it -> TypeList(List((Type.Var(cnt), false))))
-            }
+            addSymbolType(it, Type.Var(cnt), false)
         )
         val inferredBody: TypedAstNode = inferToTypedAst(body)
         val res = solveLambda(param, inferredBody.typ)
         param.foreach(it =>
-            if (typeMap(it).remove_isEmpty()) {
-                typeMap -= it
-            }
+            removeSymbolType(it)
         )
         TypedAbstraction(res._1, inferredBody, res._2)
     case Apply(func, arg) =>
@@ -156,20 +164,20 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
     case Let(bindings, in) =>
         var typedBindings: List[(TypedSymbol, TypedAstNode)] = Nil
         bindings.foreach((symbol, astNode) =>
-            val typed: TypedAstNode = inferToTypedAst(astNode)
+            val typed: TypedAstNode = astNode match
+                case _:Abstraction =>
+                    cnt += 1
+                    addSymbolType(symbol, Type.Var(cnt), false)
+                    val res = inferToTypedAst(astNode)
+                    removeSymbolType(symbol)
+                    res
+                case _ => inferToTypedAst(astNode)
             typedBindings = (TypedSymbol(symbol.name, typed.typ), typed)::typedBindings
-            if (typeMap.contains(symbol)) {
-                typeMap(symbol).add((typed.typ, true))
-            } else {
-                typeMap += (symbol -> TypeList(List((typed.typ, true))))
-            }
+            addSymbolType(symbol, typed.typ, true)
         )
         val res = inferToTypedAst(in)
-        bindings.foreach(it =>
-            val (symbol, astNode) = it
-            if (typeMap(symbol).remove_isEmpty()) {
-                typeMap -= symbol
-            }
+        bindings.foreach((symbol, astNode) =>
+            removeSymbolType(symbol)
         )
         TypedLet(typedBindings.reverse, res, res.typ)
     case Block(content) =>
@@ -185,19 +193,23 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
         var list: List[(Pattern,TypedAstNode)] = List((arms.head._1, inferToTypedAst(arms.head._2)))
         typeMap = typeMapList.head
         typeMapList = typeMapList.tail
-        val armtype: Type = list.head._2.typ
-        arms.tail.foreach((pattern, ast) => {
-            typeMapList = typeMap::typeMapList
-            val type1: Type = solvePattern(pattern)
-            if(type1 != null && type0 != type1) throw new WrongTypeException(s"$type0 != $type1")
-            list = (pattern, inferToTypedAst(ast))::list
-            if(armtype != list.head._2.typ) throw new WrongTypeException(s"Require $armtype, but found ${list.head._2.typ}")
-            typeMap = typeMapList.head
-            typeMapList = typeMapList.tail
-        })
-        solveEquation(typedobj.typ, type0)
-        updateSymbolType()
-        TypedMatch(typedobj, list, armtype)
+        var armtype: Type = list.head._2.typ
+        if(type0 == null){
+            TypedMatch(typedobj, list, armtype)
+        }else{
+            arms.tail.foreach((pattern, ast) => {
+                typeMapList = typeMap :: typeMapList
+                val type1: Type = solvePattern(pattern)
+                if (type1 != null && type0 != type1) throw new WrongTypeException(s"$type0 != $type1")
+                list = (pattern, inferToTypedAst(ast)) :: list
+                equalAndUpdate(armtype, list.head._2.typ)
+                armtype = updateInEnv(armtype)
+                typeMap = typeMapList.head
+                typeMapList = typeMapList.tail
+            })
+            equalAndUpdate(typedobj.typ, type0)
+            TypedMatch(typedobj, list, armtype)
+        }
     case Data(name, constructors) =>
         val typ = Type.RealType(RType.Data(name))
         def cons(list: List[String], end: Type): Type = list match{
@@ -213,11 +225,7 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
         constructors.foreach((name1, list) =>{
             val symbol = Symbol(name1)
             val typ1: Type = cons(list, typ)
-            if (typeMap.contains(symbol)) {
-                typeMap(symbol).add((typ1, true))
-            } else {
-                typeMap += (symbol -> TypeList(List((typ1, true))))
-            }
+            addSymbolType(symbol, typ1, false)
         })
         TypedData(name, constructors, typ)
 }
@@ -239,11 +247,7 @@ def solvePattern(pattern: Pattern): Type = pattern match {
                     if(next != type1) throw new WrongTypeException(s"Require $type1, but found $next")
                 case i: Pattern.Identifier =>
                     val symbol = Symbol(i.ident)
-                    if (typeMap.contains(symbol)) {
-                        typeMap(symbol).add((type1, false))
-                    } else {
-                        typeMap += (symbol -> TypeList(List((type1, false))))
-                    }
+                    addSymbolType(symbol, type1, false)
                 case _ =>
         )
         typ match
@@ -279,6 +283,11 @@ def updateInEnv(input: Type): Type = input match {
         Type.Arrow(updateInEnv(left), updateInEnv(right))
     case re: Type.RealType =>
         re
+}
+
+def equalAndUpdate(l: Type, r: Type): Unit = {
+    solveEquation(l, r)
+    updateSymbolType()
 }
 
 def solveEquation(l: Type, r: Type): Unit = updateInEnv(l) match {
@@ -330,8 +339,7 @@ def solveApplyList(func: Type, arg: List[Type]): Type = {
     def solveApply(l: Type, r: Type): Type = {
         updateInEnv(l) match {
             case Type.Arrow(left, right) =>
-                solveEquation(left, r)
-                updateSymbolType()
+                equalAndUpdate(left, r)
                 updateInEnv(right)
             case v: Type.Var =>
                 cnt += 1
