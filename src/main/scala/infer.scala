@@ -215,9 +215,9 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
         def cons(list: List[String], end: Type): Type = list match{
             case ::(head, next) =>
                 val h: Type = head match
-                    case "Int" => Type.RealType(RType.Int)
-                    case "Bool" => Type.RealType(RType.Bool)
-                    case "Unit" => Type.RealType(RType.Unit)
+                    case "int" => Type.RealType(RType.Int)
+                    case "bool" => Type.RealType(RType.Bool)
+                    case "unit" => Type.RealType(RType.Unit)
                     case data => Type.RealType(RType.Data(data))
                 Type.Arrow(h, cons(next, end))
             case Nil => end
