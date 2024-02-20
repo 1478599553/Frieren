@@ -88,7 +88,7 @@ object FrierenParser extends RegexParsers {
     def constructor : Parser[(String,List[String])] = spaced(symbol) ~ (spaced("of") ~> repsep(spaced(symbol),spaced("*"))) ^^ {case Symbol(constructor) ~ paraTypeList => (constructor,paraTypeList.map({case Symbol(name)=>name}))} | spaced(symbol) ^^{case Symbol(constructor) => (constructor, List())}
     def data : Parser[Data] = (spaced("data") ~> spaced(symbol) ~ (spaced("=") ~> repsep(spaced(constructor),spaced("|"))) ^^ {case Symbol(name) ~ con => Data(name,con)})
 
-    def matchexpr : Parser[Match] = (spaced("match") ~> spaced(symbol) <~ (spaced("with") | exception("match without with"))) ~
+    def matchexpr : Parser[Match] = (spaced("match") ~> spaced(expr) <~ (spaced("with") | exception("match without with"))) ~
         (spaced(matchcase) | spaced("|") ~> spaced(matchcase)) ~ rep(spaced("|") ~> spaced(matchcase)) ^^ {case obj ~ h ~ tail => Match(obj, h::tail)}
 
     def matchcase : Parser[(Pattern,AstNode)] = (spaced(pattern) <~ (spaced("->") | exception("pattern without ->"))) ~ spaced(expr) ^^ {case p ~ e => (p, e)}
