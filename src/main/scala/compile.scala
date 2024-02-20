@@ -1,6 +1,10 @@
 package frieren
 
+import java.util.UUID
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+var dataDefList = ListBuffer.empty[Data]
+var isStruct = ListBuffer.empty[String]
 
 def compile(expr:AstNode) : String = {
     expr match
@@ -19,17 +23,35 @@ def compile(expr:AstNode) : String = {
                |}()
                |""".stripMargin
         case Bool(value) =>value.toString
-        case Block(content) => ???
-        case Match(obj, arms) =>
+        case Block(content) =>
             s"""
-               |${arms.map({case (p,v) =>{
-                p match
-                    case Pattern.ConstructorDeconstruction(constructor, tupleItems) => ???
-                    case Pattern.Identifier(ident) => ???
-                    case Pattern.WildCard => ???
-            } })}
+               |[&](){
+               |${
+                    val compiled = content.map(compile)
+                    s"${compiled.init.mkString(";\n")} return ${compiled.last};"
+                }
+               |}()
                |""".stripMargin
-        case Data(name,constructors) =>
+        case Match(obj, arms) =>
+            val objName = "v"+UUID.randomUUID().toString.replace("-","")
+            s"""
+               |[&](){
+               |auto $objName = ${compile(obj)};
+               |${arms.map {case (p,v) =>
+                s"""
+                   |if(${getPatternCond(p)(objName)}){
+                   |${getPatternAssign(p)(objName).mkString}
+                   |return ${compile(v)};
+                   |}
+                   |
+                   |""".stripMargin
+                }.mkString("else ")}
+               |}()
+               |""".stripMargin
+        case data@Data(name,constructors) =>
+            dataDefList.addOne(data)
+            data.constructors.map { case (_, members) => members }.foreach(list=>list.foreach(it=>if dataDefList.map { case Data(name, _) => name }.contains(it) then isStruct.addOne(it)))
+
             s"""
                |struct $name {
                |short flag;
@@ -38,7 +60,7 @@ def compile(expr:AstNode) : String = {
                 {case (name,member)=>
                     s"""
                        |struct {
-                       |${member.map(typename => s"$typename ${genName()};\n").mkString}
+                       |${member.zipWithIndex.map({ case (typename,index) => s"${if isStruct.contains(typename) then typename+"*" else typename} v$index;\n" }).mkString}
                        |}$name;
                        |""".stripMargin
                 }
@@ -46,37 +68,49 @@ def compile(expr:AstNode) : String = {
                |    }v;
                |};
                |${constructors.map({case (cName,member) =>
-                val paraList = ListBuffer.empty[String]
+
             s"""
-                   |auto $cName = [&](${member.map(it => {
-                val pName = genName();
-                paraList.addOne(pName);
-                s"$it $pName"
-            }).mkString(",")}){
-                   |        return $name{${constructors.map({ case (consName, _) => consName }).indexOf(cName)},{.$cName={ ${paraList.mkString(",")} }}};
+                   |auto $cName = [&](${member.zipWithIndex.map({ case (it,index) => s"auto v$index"}).mkString(",")}) -> $name* {
+                   |        return new $name{${constructors.map({ case (consName, _) => consName }).indexOf(cName)},{.$cName={ ${member.zipWithIndex.map("v"+_._2).mkString(",")} }}};
                    |    };
                    |""".stripMargin
-            })}
+            }).mkString}
                |""".stripMargin
 
 }
 
-def toCppType(typ:Type): String = {
-    typ match
-        case Type.Arrow(left, right) =>
-            (left,right) match
-                case (Type.Var(_), Type.Var(_)) => ???
-        case Type.Var(num) => ???
-        case Type.RealType(name) =>
-            name match
-                case RType.Int => "int"
-                case RType.Bool => "bool"
-                case RType.Unit => "unit"
-                case RType.WrongType(message) => ???
+def getPatternCond(pattern: Pattern): String => String = {
+    (obj: String) =>
+        pattern match
+            case Pattern.ConstructorDeconstruction(constructor, tupleItems) =>
+                val index = getIndex(constructor)
+                val buffer = ListBuffer.empty[String]
+                var objName = s"$obj->v.$constructor"
+
+                buffer.addOne(s"$obj->flag==$index")
+                tupleItems.zipWithIndex.foreach{case (p,index) => buffer.addOne(getPatternCond(p)(s"$objName.v$index"))}
+                buffer.mkString("&&")
+            case Pattern.Identifier(ident) => "true"
+            case Pattern.WildCard => "true"
+}
+def getPatternAssign(pattern: Pattern): String => String = {
+    (obj: String) =>
+        pattern match
+            case Pattern.ConstructorDeconstruction(constructor, tupleItems) =>
+                val buffer = ListBuffer.empty[String]
+                var objName = s"$obj->v.$constructor"
+
+                tupleItems.zipWithIndex.foreach{case (p,i) => buffer.addOne(getPatternAssign(p)(s"$objName.v$i"))}
+                buffer.mkString
+            case Pattern.Identifier(ident) => s"auto $ident = $obj;\n"
+            case Pattern.WildCard => ""
 }
 
-var count = 0
-def genName(): String = {
-    count += 1
-    "v"+count
+def getIndex(cons:String): Int = {
+    var res = -1;
+    dataDefList.foreach({case Data(name,member) =>
+        val index = member.indexWhere{case (n,_)=>n==cons}
+        if index != -1 then res = index
+    })
+    res
 }
