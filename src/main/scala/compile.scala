@@ -19,8 +19,9 @@ def compile(expr:TypedAstNode) : String = {
                             case RType.Int => paraTypes.addOne("int")
                             case RType.Bool => paraTypes.addOne("bool")
                             case RType.Unit => paraTypes.addOne("void")
-                            case RType.Data(name) => ???
+                            case RType.Data(name) => paraTypes.addOne(s"$name*")
                         }
+                        case _ => paraTypes.addOne("auto")
                     }
                     getType(right)
                 case _ =>
