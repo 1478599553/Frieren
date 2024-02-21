@@ -19,7 +19,7 @@ def repl(): Unit = {
     try {
       val ast = FrierenParser.parseToAst(input)
       //println(s"parsed to: $ast")
-      println(s"type inferred to: \n${infer(ast)}")
+      println(s"type inferred to: \n${prettyPrint(infer(ast))}")
       //println(s"interpreted to: ${interp(ast, Map[String, Value]())}")
       //println(s"compiled to: ${compile(ast)}")
     } catch {
