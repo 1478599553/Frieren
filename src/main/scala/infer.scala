@@ -128,32 +128,80 @@ case class TypedBlock(content:List[TypedAstNode], typ: Type) extends TypedAstNod
 case class TypedMatch(obj: TypedAstNode, arms: List[(Pattern,TypedAstNode)], typ: Type) extends TypedAstNode
 case class TypedData(name:String , constructors : List[(String,List[String])], typ: Type) extends TypedAstNode
 
-
 def prettyPrint(typedAstNode: TypedAstNode): String = {
     val s: StringBuilder = new StringBuilder()
     typedAstNode match {
         case TypedAbstraction(param, body, typ) =>
-            s.append("fn ")
-            if(param.isEmpty){
-                s.append("()")
-            }else if(param.tail.isEmpty){
-                s.append(param.head.name).append(": ").append(typ)
-            }else{
-                s.append("(")
-                param.foreach(it =>
-                    s.append(it.name).append(": ").append(typ)
+            s.append("(fn (")
+            if(param.nonEmpty){
+                s.append(s"${param.head.name}: ${param.head.typ}")
+                param.tail.foreach(it =>
+                    s.append(s", ${it.name}: ${it.typ}")
                 )
             }
+            s.append(s") => ${prettyPrint(body)})")
         case symbol: TypedSymbol =>
             s.append(symbol.name)
         case TypedData(name, constructors, typ) => //data List = |Cons of
             s.append(s"data $name = ${constructors.head._1} ")
             if(constructors.head._2.nonEmpty){
-                s.append("of ")
+                s.append(s"of ${constructors.head._2.head}")
+                constructors.head._2.tail.foreach(it =>
+                    s.append(s" * $it")
+                )
             }
+            constructors.tail.foreach((h, t) =>
+                s.append(s" |$h")
+                if(t.nonEmpty){
+                    s.append(s" of ${t.head}")
+                    t.tail.foreach(it =>
+                        s.append(s" * $it")
+                    )
+                }
+            )
+        case TypedAdd(value1, value2, typ) => s.append(s"${prettyPrint(value1)} + ${prettyPrint(value2)}")
+        case TypedApply(func, arg, typ) =>
+            s.append(s"${prettyPrint(func)}(")
+            if(arg.nonEmpty){
+                s.append(prettyPrint(arg.head))
+                arg.tail.foreach(it =>
+                    s.append(s", ${prettyPrint(it)}")
+                )
+            }
+            s.append(")")
+        case TypedLet(bindings, in, typ) =>
+            s.append(s"(let (${prettyPrint(bindings.head._1)}: ${bindings.head._1.typ} = ${prettyPrint(bindings.head._2)}")
+            bindings.tail.foreach((symbol, ast) =>{
+                s.append(s", ${symbol.name}: ${symbol.typ} = ${prettyPrint(ast)}")
+            })
+            s.append(s") in ${prettyPrint(in)})")
+        case TypedBool(value, typ) => s.append(value)
+        case TypedMul(lhs, rhs, typ) => s.append(s"${prettyPrint(lhs)} * ${prettyPrint(rhs)}")
+        case TypedNumber(value, typ) => s.append(value)
+        case TypedBlock(content, typ) =>
+            s.append(s"{")
+            content.foreach(it => s.append(s"${prettyPrint(it)}; "))
+            s.append("}")
+        case TypedMatch(obj, arms, typ) =>
+            s.append(s"match ${prettyPrint(obj)} with ")
+            arms.foreach((pattern, ast) =>
+                s.append(s"|${prettyPrint(pattern)} -> ${prettyPrint(ast)} ")
+            )
     }
     s.toString()
+}
 
+def prettyPrint(pattern: Pattern): String = {
+    val s: StringBuilder = new StringBuilder()
+    pattern match{
+        case Pattern.ConstructorDeconstruction(constructor, tupleItems) =>
+            s.append(s"$constructor(${prettyPrint(tupleItems.head)}")
+            tupleItems.tail.foreach(it => s.append(s", ${prettyPrint(it)}"))
+            s.append(")")
+        case Pattern.Identifier(ident) => s.append(ident)
+        case _ => s.append("_")
+    }
+    s.toString()
 }
 
 def inferToTypedAst(input: AstNode): TypedAstNode = input match {
@@ -235,7 +283,7 @@ def inferToTypedAst(input: AstNode): TypedAstNode = input match {
                 typeMapList = typeMapList.tail
             })
             equalAndUpdate(typedobj.typ, type0)
-            TypedMatch(typedobj, list, armtype)
+            TypedMatch(typedobj, list.reverse, armtype)
         }
     case Data(name, constructors) =>
         val typ = Type.RealType(RType.Data(name))
@@ -290,10 +338,14 @@ def inferToTypedList(list: List[AstNode]): List[TypedAstNode] = {
 
 def solveLambda(list: List[Symbol], body: Type):(List[TypedSymbol], Type) = {
     var t1:(List[TypedSymbol], Type) = (Nil, body)
-    val reverse = list.reverse
-    reverse.foreach(it =>
-        t1 = (TypedSymbol(it.name, typeMap(it).value)::t1._1, Type.Arrow(typeMap(it).value, t1._2))
-    )
+    if(list.isEmpty){
+        t1 = (t1._1, Type.Arrow(Type.RealType(RType.Unit), t1._2))
+    }else{
+        val reverse = list.reverse
+        reverse.foreach(it =>
+            t1 = (TypedSymbol(it.name, typeMap(it).value) :: t1._1, Type.Arrow(typeMap(it).value, t1._2))
+        )
+    }
     t1
 }
 
@@ -381,9 +433,13 @@ def solveApplyList(func: Type, arg: List[Type]): Type = {
     }
 
     var res = func
-    arg.foreach(it =>
-        res = solveApply(res, it)
-    )
+    if(arg.isEmpty){
+        res = solveApply(res, Type.RealType(RType.Unit))
+    }else{
+        arg.foreach(it =>
+            res = solveApply(res, it)
+        )
+    }
     res
 }
 
