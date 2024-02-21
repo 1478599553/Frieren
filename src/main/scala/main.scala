@@ -1,10 +1,21 @@
 package frieren
 
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import scala.annotation.tailrec
 
 @main
 def main(): Unit = {
   repl()
+}
+
+implicit class PipeOperator[A](val value: A) extends AnyVal {
+  def |>[B](f: A => B): B = f(value)
+}
+val cpb = Toolkit.getDefaultToolkit.getSystemClipboard
+def clipboard(string: String): Unit = {
+  val s = StringSelection(string)
+  cpb.setContents(s,null)
 }
 
 @tailrec

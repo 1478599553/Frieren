@@ -80,7 +80,6 @@ def compile(expr:TypedAstNode) : String = {
                |[&](){
                |auto $objName = ${compile(obj)};
                |${
-                //TODO : 为什么 arms 顺序反了？？？
                 arms.map { case (p, v) =>
                     s"""
                        |if(${getPatternCond(p)(objName)}){
