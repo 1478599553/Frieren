@@ -1,6 +1,7 @@
 package frieren
 
 import java.util.UUID
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 var dataDefList = ListBuffer.empty[Data]
@@ -10,34 +11,88 @@ var zeroParaConstructors = ListBuffer.empty[String]
 def compile(expr:TypedAstNode) : String = {
     expr match
         case TypedAbstraction(param, body, typ) => {
-            var paraTypes = ListBuffer.empty[String]
-
-            def getType(typ: Type): Unit = typ match{
-                case Type.Arrow(left, right) =>
-                    left match{
-                        case Type.RealType(rType) => rType match{
-                            case RType.Int => paraTypes.addOne("int")
-                            case RType.Bool => paraTypes.addOne("bool")
-                            case RType.Unit => paraTypes.addOne("void")
-                            case RType.Data(name) => paraTypes.addOne(s"$name*")
-                        }
-                        case _ => paraTypes.addOne("auto")
-                    }
-                    getType(right)
-                case _ =>
-            }
-
-            getType(typ)
-
-            s"[&](${param.map({ case Symbol(it) => it }).map(it => s"auto $it").mkString(",")}) {return ${compile(body)};}"
+            var typename = getCppType(typ)
+            s"[&](${param.map({ case TypedSymbol(it,typOfSym) => s"${getCppType(typOfSym)} $it" }).mkString(",")}) {return ${compile(body)};}"
         }
         case TypedAdd(value1, value2, typ) =>s"${compile(value1)}+${compile(value2)}"
-        case TypedApply(func, arg, typ) => ???
-        case TypedBlock(content, typ) => ???
-        case TypedBool(value, typ) => ???
-        case TypedData(name, constructors, typ) => ???
-        case TypedLet(bindings, in, typ) => ???
-        case TypedMatch(obj, arms, typ) => ???
+        case TypedApply(func, arg, typ) => s"(${compile(func)})(${arg.map(compile).mkString(",")})"
+        case TypedBlock(content, typ) =>
+            s"""
+               |[&](){
+               |${
+                val compiled = content.map(compile)
+                s"${compiled.init.mkString(";\n")} return ${compiled.last};"
+            }
+               |}()
+               |""".stripMargin
+        case TypedBool(value, typ) => value.toString
+        case TypedData(name, constructors, typ) =>
+            val data = Data(name,constructors)
+            dataDefList.addOne(data)
+            data.constructors.foreach { case (consName, cons) => if cons.isEmpty then zeroParaConstructors.addOne(consName) }
+            data.constructors.map { case (_, members) => members }.foreach(list => list.foreach(it => if dataDefList.map { case Data(name, _) => name }.contains(it) then isStruct.addOne(it)))
+
+            s"""
+               |struct $name {
+               |short flag;
+               |union {
+               |${
+                constructors.map(
+                    { case (name, member) =>
+                        s"""
+                           |struct {
+                           |${member.zipWithIndex.map({ case (typename, index) => s"${if isStruct.contains(typename) then typename + "*" else typename} v$index;\n" }).mkString}
+                           |}$name;
+                           |""".stripMargin
+                    }
+                ).mkString
+            }
+               |    }v;
+               |};
+               |${
+                constructors.map({ case (cName, member) =>
+                    if member.nonEmpty then
+
+                        s"""
+                           |auto $cName = [&](${member.zipWithIndex.map({ case (it, index) => s"${if isStruct.contains(it) then it + "*" else it} v$index" }).mkString(",")}) -> $name* {
+                           |        return new $name{${constructors.map({ case (consName, _) => consName }).indexOf(cName)},{.$cName={ ${member.zipWithIndex.map("v" + _._2).mkString(",")} }}};
+                           |    };
+                           |""".stripMargin
+
+                    else
+                        s"""
+                           |$name* $cName = new $name{${constructors.map({ case (consName, _) => consName }).indexOf(cName)},{.$cName={}}};
+                           |""".stripMargin
+                }).mkString
+            }
+               |""".stripMargin
+        case TypedLet(bindings, in, typ) =>
+            s"""
+               |
+               |[&](){
+               |${bindings.map({ case (TypedSymbol(sym,typ), value) => s"${getCppType(typ)} $sym = ${compile(value)};" }).mkString("")}
+               |return ${compile(in)};
+               |}()
+               |""".stripMargin
+        case TypedMatch(obj, arms, typ) =>
+            val objName = "v" + UUID.randomUUID().toString.replace("-", "")
+            s"""
+               |[&](){
+               |auto $objName = ${compile(obj)};
+               |${
+                //TODO : 为什么 arms 顺序反了？？？
+                arms.reverse.map { case (p, v) =>
+                    s"""
+                       |if(${getPatternCond(p)(objName)}){
+                       |${getPatternAssign(p)(objName).mkString}
+                       |return ${compile(v)};
+                       |}
+                       |
+                       |""".stripMargin
+                }.mkString("else ")
+            }
+               |}()
+               |""".stripMargin
         case TypedMul(lhs, rhs, typ) => s"${compile(lhs)}*${compile(rhs)}"
         case TypedNumber(value, typ) => value.toString
         case TypedSymbol(name, typ) => name
@@ -167,3 +222,37 @@ def getIndex(cons:String): Int = {
     res
 }
 
+def getCppType(typ: Type) : String = {
+    typ match
+        case it@Type.Arrow(_, _) => {
+            var para = ListBuffer.empty[Type]
+            var ret = Type.Var(-1)
+
+            var polyFlag = false
+
+            @tailrec
+            def treatArrow(arrow: Type.Arrow): Unit = {
+                arrow match
+                    case Type.Arrow(left, r@Type.Arrow(_,_)) =>
+                        para.addOne(left)
+                        if left.isInstanceOf[Type.Var] then polyFlag = true
+                        treatArrow(r)
+                    case Type.Arrow(left, right) =>
+                        para.addOne(left)
+                        if left.isInstanceOf[Type.Var] || right.isInstanceOf[Type.Var] then polyFlag = true
+                        ret = right
+            }
+            treatArrow(it)
+
+            if polyFlag then return "auto"
+            else s"function<${getCppType(ret)}(${para.map(getCppType).mkString(",")})>"
+        }
+
+        case Type.Var(num) => "auto"
+        case Type.RealType(name) =>
+            name match
+                case RType.Int => "int"
+                case RType.Bool => "bool"
+                case RType.Unit => "unit"
+                case RType.Data(name) => name + "*"
+}
